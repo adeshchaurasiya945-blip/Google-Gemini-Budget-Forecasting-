@@ -8,12 +8,7 @@ import {
 } from 'recharts';
 import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare } from 'lucide-react';
 
-const DEPARTMENTS = [
-  "All",
-  "Procurement", "Production", "Quality Control", "Packaging", 
-  "Sales & Distribution", "Marketing", "R&D", "Human Resources", 
-  "Finance", "IT & Operations"
-];
+const DEPARTMENTS = [];
 
 export default function Dashboard() {
   const { transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory } = useAppContext();
