@@ -1,5 +1,9 @@
 {
-  "name": "",
-  "description": "",
-  "requestFramePermissions": []
+  "name": "Budget Tracker",
+  "description": "Financial tracking app with Supabase",
+  "requestFramePermissions": [
+    {
+      "origin": "https://rfpnnlorxabpfdispgss.supabase.co"
+    }
+  ]
 }

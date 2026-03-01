@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 export interface Transaction {
-  id: string;
+  id: number;
   date: string;
   department: string;
   head: string;
@@ -9,6 +10,13 @@ export interface Transaction {
   actual: number;
   plan: number;
   forecast: number;
+  created_at: string;
+}
+
+export interface Categories {
+  departments: string[];
+  heads: string[];
+  subHeads: string[];
 }
 
 interface AppContextType {
@@ -17,65 +25,143 @@ interface AppContextType {
   logoUrl: string | null;
   setLogoUrl: (url: string | null) => void;
   transactions: Transaction[];
+  categories: Categories;
+  loading: boolean;
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
-  updateTransaction: (id: string, tx: Omit<Transaction, 'id'>) => void;
-  deleteTransaction: (id: string) => void;
+  updateTransaction: (id: number, tx: Omit<Transaction, 'id'>) => void; // Changed to number
+  deleteTransaction: (id: number) => void; // Changed to number
   renameCategory: (type: 'department' | 'head' | 'subHead', oldName: string, newName: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const generateMockData = (): Transaction[] => {
-  const depts = [
-    "Procurement", "Production", "Quality Control", "Packaging", 
-    "Sales & Distribution", "Marketing", "R&D", "Human Resources", 
-    "Finance", "IT & Operations"
-  ];
-  const heads = ["Raw Materials", "Equipment", "Salaries", "Software", "Logistics", "Advertising"];
-  const subHeads = ["Spices", "Machinery", "Bonus", "Cloud", "Transport", "Social Media"];
-  
-  const data: Transaction[] = [];
-  for (let i = 0; i < 50; i++) {
-    const actual = Math.floor(Math.random() * 50000000) + 1000000;
-    const plan = actual * (1 + (Math.random() * 0.2 - 0.1));
-    const forecast = plan * (1 + (Math.random() * 0.15));
-    
-    data.push({
-      id: `tx-${i}`,
-      date: new Date(2025, Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1).toISOString().split('T')[0],
-      department: depts[Math.floor(Math.random() * depts.length)],
-      head: heads[Math.floor(Math.random() * heads.length)],
-      subHead: subHeads[Math.floor(Math.random() * subHeads.length)],
-      actual,
-      plan,
-      forecast
-    });
-  }
-  return data.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-};
-
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [companyName, setCompanyName] = useState('Global Spices Co.');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
-  const [transactions, setTransactions] = useState<Transaction[]>(generateMockData());
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const addTransaction = (tx: Omit<Transaction, 'id'>) => {
-    setTransactions(prev => [{ ...tx, id: `tx-${Date.now()}` }, ...prev]);
+  // Define categories state
+  const [categories, setCategories] = useState<Categories>({
+    departments: [],
+    heads: [],
+    subHeads: []
+  });
+
+  // Helper to extract unique categories from transaction data
+  const updateCategoriesFromData = (data: Transaction[]) => {
+    const depts = Array.from(new Set(data.map(item => item.department))).sort();
+    const heads = Array.from(new Set(data.map(item => item.head))).sort();
+    const subHeads = Array.from(new Set(data.map(item => item.subHead))).sort();
+
+    setCategories({
+      departments: depts,
+      heads: heads,
+      subHeads: subHeads
+    });
   };
 
-  const updateTransaction = (id: string, tx: Omit<Transaction, 'id'>) => {
-    setTransactions(prev => prev.map(t => t.id === id ? { ...tx, id } : t));
-  };
+  useEffect(() => {
+    const fetchTransactions = async () => {
+      setLoading(true);
+      try {
+        console.log('🧪 Fetching transactions from Supabase...');
+        console.log('Supabase instance:', !!supabase);
+        
+        const { data, error } = await supabase
+          .from('transactions')
+          .select('*')
+          .order('date', { ascending: false });
+        
+        console.log('Response received');
+        console.log('Error object:', error);
+        console.log('Data received:', data);
 
-  const deleteTransaction = (id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id));
-  };
+        if (error) {
+          console.error('❌ Supabase error:', error.message, error.code, error.details);
+          alert(`Database error: ${error.message}`);
+        } else if (data && data.length > 0) {
+          console.log('✅ Successfully fetched', data.length, 'records');
+          const txs = data as Transaction[];
+          setTransactions(txs);
+          updateCategoriesFromData(txs);
+        } else if (data) {
+          console.log('✅ Query successful but no data returned (empty table)');
+          setTransactions([]);
+        } else {
+          console.warn('⚠️ No data and no error returned');
+        }
+      } catch (err) {
+        console.error('❌ Unexpected error:', err);
+        alert(`Unexpected error: ${err}`);
+      } finally { 
+        setLoading(false);
+      }
+    };
+
+    fetchTransactions();
+  }, []);
+
+ const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
+  try {
+    // 1. Ensure numerical values are actually numbers, not strings from input fields
+    const formattedTx = {
+      ...tx,
+      actual: Number(tx.actual),
+      plan: Number(tx.plan),
+      forecast: Number(tx.forecast),
+    };
+
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert([formattedTx]) // Supabase generates the ID automatically
+      .select();
+
+    if (error) {
+      console.error('Supabase Insert Error:', error.message);
+      alert(`Error: ${error.message}`); // Helpful for immediate debugging
+      return;
+    }
+
+    if (data) {
+      setTransactions(prev => [data[0], ...prev]);
+      updateCategoriesFromData([data[0], ...transactions]);
+    }
+  } catch (err) {
+    console.error('Unexpected error:', err);
+  }
+};
+
+const updateTransaction = async (id: number, tx: Omit<Transaction, 'id'>) => {
+  const { error } = await supabase
+    .from('transactions')
+    .update(tx)
+    .eq('id', id);
+
+  if (!error) {
+    const updatedTxs = transactions.map(t => (t.id === id ? { ...tx, id } : t));
+    setTransactions(updatedTxs);
+    updateCategoriesFromData(updatedTxs);
+  }
+};
+
+const deleteTransaction = async (id: number) => {
+  const { error } = await supabase
+    .from('transactions')
+    .delete()
+    .eq('id', id);
+
+  if (!error) {
+    const updatedTxs = transactions.filter(t => t.id !== id);
+    setTransactions(updatedTxs);
+    updateCategoriesFromData(updatedTxs);
+  }
+};
 
   const renameCategory = (type: 'department' | 'head' | 'subHead', oldName: string, newName: string) => {
+    // Note: To persist this in DB, you would need a bulk update query.
     setTransactions(prev => prev.map(t => {
-      if (t[type] === oldName) {
-        return { ...t, [type]: newName };
-      }
+      if (t[type] === oldName) return { ...t, [type]: newName };
       return t;
     }));
   };
@@ -84,7 +170,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     <AppContext.Provider value={{
       companyName, setCompanyName,
       logoUrl, setLogoUrl,
-      transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory
+      transactions, categories, loading, // categories now shared globally
+      addTransaction, updateTransaction, deleteTransaction, renameCategory
     }}>
       {children}
     </AppContext.Provider>
