@@ -36,7 +36,7 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [companyName, setCompanyName] = useState('Global Spices Co.');
+  const [companyName, setCompanyName] = useState('K Ahuja Foods');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
