@@ -1,177 +1,152 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { rawCsvData } from '../data/csvData';
+import { parseCsvData } from '../utils/parseData';
 
 export interface Transaction {
-  id: number;
+  id: string;
   date: string;
   department: string;
   head: string;
   subHead: string;
   actual: number;
-  plan: number;
   forecast: number;
-  created_at: string;
-}
-
-export interface Categories {
-  departments: string[];
-  heads: string[];
-  subHeads: string[];
 }
 
 interface AppContextType {
   companyName: string;
   setCompanyName: (name: string) => void;
-  logoUrl: string | null;
-  setLogoUrl: (url: string | null) => void;
+  logo: string | null;
+  setLogo: (logo: string | null) => void;
   transactions: Transaction[];
-  categories: Categories;
-  loading: boolean;
   addTransaction: (tx: Omit<Transaction, 'id'>) => void;
-  updateTransaction: (id: number, tx: Omit<Transaction, 'id'>) => void; // Changed to number
-  deleteTransaction: (id: number) => void; // Changed to number
+  updateTransaction: (id: string, tx: Omit<Transaction, 'id'>) => void;
+  deleteTransaction: (id: string) => void;
   renameCategory: (type: 'department' | 'head' | 'subHead', oldName: string, newName: string) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [companyName, setCompanyName] = useState('K Ahuja Foods');
-  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState('Global Spices Co.');
+  const [logo, setLogo] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Define categories state
-  const [categories, setCategories] = useState<Categories>({
-    departments: [],
-    heads: [],
-    subHeads: []
-  });
-
-  // Helper to extract unique categories from transaction data
-  const updateCategoriesFromData = (data: Transaction[]) => {
-    const depts = Array.from(new Set(data.map(item => item.department))).sort();
-    const heads = Array.from(new Set(data.map(item => item.head))).sort();
-    const subHeads = Array.from(new Set(data.map(item => item.subHead))).sort();
-
-    setCategories({
-      departments: depts,
-      heads: heads,
-      subHeads: subHeads
-    });
-  };
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      setLoading(true);
-      try {
-        console.log('🧪 Fetching transactions from Supabase...');
-        console.log('Supabase instance:', !!supabase);
-        
-        const { data, error } = await supabase
-          .from('transactions')
-          .select('*')
-          .order('date', { ascending: false });
-        
-        console.log('Response received');
-        console.log('Error object:', error);
-        console.log('Data received:', data);
-
-        if (error) {
-          console.error('❌ Supabase error:', error.message, error.code, error.details);
-          alert(`Database error: ${error.message}`);
-        } else if (data && data.length > 0) {
-          console.log('✅ Successfully fetched', data.length, 'records');
-          const txs = data as Transaction[];
-          setTransactions(txs);
-          updateCategoriesFromData(txs);
-        } else if (data) {
-          console.log('✅ Query successful but no data returned (empty table)');
-          setTransactions([]);
-        } else {
-          console.warn('⚠️ No data and no error returned');
-        }
-      } catch (err) {
-        console.error('❌ Unexpected error:', err);
-        alert(`Unexpected error: ${err}`);
-      } finally { 
-        setLoading(false);
-      }
-    };
-
     fetchTransactions();
   }, []);
 
- const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
-  try {
-    // 1. Ensure numerical values are actually numbers, not strings from input fields
-    const formattedTx = {
-      ...tx,
-      actual: Number(tx.actual),
-      plan: Number(tx.plan),
-      forecast: Number(tx.forecast),
-    };
-
-    const { data, error } = await supabase
-      .from('transactions')
-      .insert([formattedTx]) // Supabase generates the ID automatically
-      .select();
-
-    if (error) {
-      console.error('Supabase Insert Error:', error.message);
-      alert(`Error: ${error.message}`); // Helpful for immediate debugging
+  const fetchTransactions = async () => {
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      // Fallback to CSV data if Supabase is not configured
+      const parsedData = parseCsvData(rawCsvData);
+      setTransactions(parsedData);
+      setIsLoading(false);
       return;
     }
 
-    if (data) {
-      setTransactions(prev => [data[0], ...prev]);
-      updateCategoriesFromData([data[0], ...transactions]);
+    try {
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('date', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching transactions:', error);
+        // Fallback to CSV data on error
+        const parsedData = parseCsvData(rawCsvData);
+        setTransactions(parsedData);
+      } else if (data) {
+        if (data.length === 0) {
+          // Use CSV data if database is empty
+          const parsedData = parseCsvData(rawCsvData);
+          setTransactions(parsedData);
+        } else {
+          setTransactions(data);
+        }
+      }
+    } catch (err: any) {
+      console.error('Supabase fetch error:', err);
+      // Fallback to CSV data on error
+      const parsedData = parseCsvData(rawCsvData);
+      setTransactions(parsedData);
+    } finally {
+      setIsLoading(false);
     }
-  } catch (err) {
-    console.error('Unexpected error:', err);
-  }
-};
+  };
 
-const updateTransaction = async (id: number, tx: Omit<Transaction, 'id'>) => {
-  const { error } = await supabase
-    .from('transactions')
-    .update(tx)
-    .eq('id', id);
+  const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
+    const newTx = { ...tx, id: `tx-${Date.now()}` };
+    // Optimistic update
+    setTransactions(prev => [newTx, ...prev]);
+    
+    try {
+      const { error } = await supabase.from('transactions').insert([newTx]);
+      if (error) {
+        console.error('Error adding transaction:', error);
+        alert(`Failed to save to database: ${error.message}\n\nPlease check your Supabase setup (Table name, RLS policies, and Environment Variables).`);
+      }
+    } catch (err: any) {
+      console.error('Supabase insert error:', err);
+      alert(`Connection error: ${err.message}`);
+    }
+  };
 
-  if (!error) {
-    const updatedTxs = transactions.map(t => (t.id === id ? { ...tx, id } : t));
-    setTransactions(updatedTxs);
-    updateCategoriesFromData(updatedTxs);
-  }
-};
+  const updateTransaction = async (id: string, tx: Omit<Transaction, 'id'>) => {
+    // Optimistic update
+    setTransactions(prev => prev.map(t => t.id === id ? { ...tx, id } : t));
+    
+    try {
+      const { error } = await supabase.from('transactions').update(tx).eq('id', id);
+      if (error) {
+        console.error('Error updating transaction:', error);
+        alert(`Failed to update database: ${error.message}`);
+      }
+    } catch (err: any) {
+      console.error('Supabase update error:', err);
+    }
+  };
 
-const deleteTransaction = async (id: number) => {
-  const { error } = await supabase
-    .from('transactions')
-    .delete()
-    .eq('id', id);
+  const deleteTransaction = async (id: string) => {
+    // Optimistic update
+    setTransactions(prev => prev.filter(t => t.id !== id));
+    
+    try {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) {
+        console.error('Error deleting transaction:', error);
+        alert(`Failed to delete from database: ${error.message}`);
+      }
+    } catch (err: any) {
+      console.error('Supabase delete error:', err);
+    }
+  };
 
-  if (!error) {
-    const updatedTxs = transactions.filter(t => t.id !== id);
-    setTransactions(updatedTxs);
-    updateCategoriesFromData(updatedTxs);
-  }
-};
-
-  const renameCategory = (type: 'department' | 'head' | 'subHead', oldName: string, newName: string) => {
-    // Note: To persist this in DB, you would need a bulk update query.
+  const renameCategory = async (type: 'department' | 'head' | 'subHead', oldName: string, newName: string) => {
+    // Optimistic update
     setTransactions(prev => prev.map(t => {
-      if (t[type] === oldName) return { ...t, [type]: newName };
+      if (t[type] === oldName) {
+        return { ...t, [type]: newName };
+      }
       return t;
     }));
+    
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({ [type]: newName })
+        .eq(type, oldName);
+      if (error) console.error('Error renaming category:', error);
+    } catch (err) {
+      console.error('Supabase rename error:', err);
+    }
   };
 
   return (
     <AppContext.Provider value={{
-      companyName, setCompanyName,
-      logoUrl, setLogoUrl,
-      transactions, categories, loading, // categories now shared globally
-      addTransaction, updateTransaction, deleteTransaction, renameCategory
+      companyName, setCompanyName, logo, setLogo,
+      transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory
     }}>
       {children}
     </AppContext.Provider>

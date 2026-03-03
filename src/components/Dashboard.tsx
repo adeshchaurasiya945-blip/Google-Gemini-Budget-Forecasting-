@@ -6,9 +6,16 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
   PieChart, Pie, Cell, ComposedChart, Area, Line, LineChart
 } from 'recharts';
-import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare } from 'lucide-react';
+import * as htmlToImage from 'html-to-image';
+import { jsPDF } from 'jspdf';
+import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare, Camera } from 'lucide-react';
 
-const DEPARTMENTS = [];
+const DEPARTMENTS = [
+  "All",
+  "Quality", "Procurement", "Production", "Operations", 
+  "Documents", "Accounts", "Sales", "Admin", 
+  "HR", "MDO"
+];
 
 export default function Dashboard() {
   const { transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory } = useAppContext();
@@ -20,18 +27,26 @@ export default function Dashboard() {
   const [showFormulas, setShowFormulas] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   
-  const [barChartMetric, setBarChartMetric] = useState<'all' | 'actual_vs_plan' | 'actual_vs_forecast'>('all');
-  const [pieChartMetric, setPieChartMetric] = useState<'actual' | 'plan' | 'forecast'>('forecast');
+  const [barChartMetric, setBarChartMetric] = useState<'all' | 'actual_vs_forecast'>('all');
+  const [pieChartMetric, setPieChartMetric] = useState<'actual' | 'forecast'>('forecast');
   
   const [forecastAdjustments, setForecastAdjustments] = useState<Record<string, number>>({});
   const [varianceSearchQuery, setVarianceSearchQuery] = useState("");
+  const [budgetComparisonMetric, setBudgetComparisonMetric] = useState('actual');
+  const [budgetComparisonView, setBudgetComparisonView] = useState('department'); // 'department' or 'month'
   
-  // Sales State for Comparison
   const [sales, setSales] = useState({
-    actual: 100000000,
-    plan: 110000000,
     forecast: 115000000
   });
+  
+  const [monthlySales, setMonthlySales] = useState<Record<string, number>>({
+    'Jan': 8000000, 'Feb': 8500000, 'Mar': 9000000, 'Apr': 8000000, 
+    'May': 8200000, 'Jun': 8400000, 'Jul': 8600000, 'Aug': 8800000, 
+    'Sep': 9000000, 'Oct': 9200000, 'Nov': 9400000, 'Dec': 9600000
+  });
+  const [selectedSalesMonth, setSelectedSalesMonth] = useState('Apr');
+  
+  const totalActualSales = useMemo(() => Object.values(monthlySales).reduce((a, b) => a + b, 0), [monthlySales]);
 
   // Dynamic Departments based on transactions
   const dynamicDepartments = useMemo(() => {
@@ -57,7 +72,6 @@ export default function Dashboard() {
     head: string;
     subHead: string;
     actual: number;
-    plan: number;
     forecast: number;
     isNewDept: boolean;
     isNewHead: boolean;
@@ -73,7 +87,6 @@ export default function Dashboard() {
     head: '',
     subHead: '',
     actual: 0,
-    plan: 0,
     forecast: 0,
     isNewDept: false,
     isNewHead: false,
@@ -167,14 +180,34 @@ export default function Dashboard() {
 
       return {
         actual: acc.actual + curr.actual,
-        plan: acc.plan + curr.plan,
         forecast: acc.forecast + adjustedForecast
       };
-    }, { actual: 0, plan: 0, forecast: 0 });
+    }, { actual: 0, forecast: 0 });
   }, [filteredTransactions, selectedDept, selectedHead, forecastAdjustments]);
 
-  const variance = totals.forecast - totals.plan;
-  const variancePercent = totals.plan > 0 ? (variance / totals.plan) * 100 : 0;
+  const variance = totals.forecast - totals.actual;
+  const variancePercent = totals.actual > 0 ? (variance / totals.actual) * 100 : 0;
+
+  // New KPIs
+  const avgMonthlyExpense = totals.actual / 12;
+  const totalCompanyExpense = useMemo(() => transactions.reduce((sum, t) => sum + t.actual, 0), [transactions]);
+  const deptExpenseShare = totalCompanyExpense > 0 ? (totals.actual / totalCompanyExpense) * 100 : 0;
+  const salesToDeptRatio = totals.actual > 0 ? (totalActualSales / totals.actual) : 0;
+  
+  const { fixedCost, variableCost } = useMemo(() => {
+    const fixedKeywords = ['salaries', 'rent', 'amc', 'insurance', 'fixed', 'wages', 'personnel', 'benefits'];
+    const fixed = filteredTransactions.reduce((sum, t) => {
+      const isFixed = fixedKeywords.some(k => 
+        t.subHead.toLowerCase().includes(k) || 
+        t.head.toLowerCase().includes(k)
+      );
+      return sum + (isFixed ? t.actual : 0);
+    }, 0);
+    return { fixedCost: fixed, variableCost: totals.actual - fixed };
+  }, [filteredTransactions, totals.actual]);
+
+  const fixedCostPercent = totals.actual > 0 ? (fixedCost / totals.actual) * 100 : 0;
+  const variableCostPercent = totals.actual > 0 ? (variableCost / totals.actual) * 100 : 0;
 
   // Dynamic labels based on filter level
   const getLevelLabel = () => {
@@ -198,26 +231,50 @@ export default function Dashboard() {
 
     const totals = filteredTransactions.reduce((acc, curr) => {
       const key = curr[groupBy];
-      if (!acc[key]) acc[key] = { actual: 0, plan: 0, forecast: 0, originalForecast: 0 };
+      if (!acc[key]) acc[key] = { actual: 0, forecast: 0, originalForecast: 0 };
       acc[key].actual += curr.actual;
-      acc[key].plan += curr.plan;
       acc[key].originalForecast += curr.forecast;
       
       const adj = forecastAdjustments[key] || 0;
       acc[key].forecast += curr.forecast * (1 + adj / 100);
       return acc;
-    }, {} as Record<string, { actual: number, plan: number, forecast: number, originalForecast: number }>);
+    }, {} as Record<string, { actual: number, forecast: number, originalForecast: number }>);
     
     return Object.entries(totals)
       .map(([name, values]: [string, any]) => ({ 
         name, 
         actual: values.actual, 
-        plan: values.plan, 
         forecast: values.forecast,
         originalForecast: values.originalForecast
       }))
       .sort((a, b) => b.actual - a.actual);
   }, [filteredTransactions, selectedDept, selectedHead, forecastAdjustments]);
+
+  const monthWiseData = useMemo(() => {
+    const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+    const data = months.map(month => ({ name: month, actual: 0, forecast: 0 }));
+    
+    filteredTransactions.forEach(t => {
+      if (t.date) {
+        const dateObj = new Date(t.date);
+        const monthIndex = dateObj.getMonth(); // 0-11
+        // Map 0-11 (Jan-Dec) to our financial year array (Apr-Mar)
+        // Jan (0) -> index 9
+        // Feb (1) -> index 10
+        // Mar (2) -> index 11
+        // Apr (3) -> index 0
+        const fyIndex = monthIndex >= 3 ? monthIndex - 3 : monthIndex + 9;
+        if (fyIndex >= 0 && fyIndex < 12) {
+          data[fyIndex].actual += t.actual;
+          data[fyIndex].forecast += t.forecast;
+        }
+      }
+    });
+    
+    return data;
+  }, [filteredTransactions]);
+
+  const budgetComparisonData = budgetComparisonView === 'department' ? chartData.slice(0, 10) : monthWiseData;
 
   // Pie Chart Data: Distribution of Forecast by current filter level
   const pieChartData = useMemo(() => {
@@ -253,14 +310,13 @@ export default function Dashboard() {
   );
 
   const exportToCSV = () => {
-    const headers = ["Date", "Department", "Head", "Sub Head", "Actual (25-26)", "Plan (25-26)", "Forecast (26-27)"];
+    const headers = ["Date", "Department", "Head", "Sub Head", "Actual (25-26)", "Forecast (26-27)"];
     const csvData = searchedTransactions.map(t => [
       t.date,
       t.department,
       t.head,
       t.subHead,
       t.actual,
-      t.plan,
       t.forecast
     ]);
     
@@ -287,15 +343,14 @@ export default function Dashboard() {
   }, [chartData, varianceSearchQuery]);
 
   const exportVarianceToCSV = () => {
-    const headers = [getColumnLabel(), "Actual (25-26)", "Plan (25-26)", "Forecast (26-27)", "Variance", "Variance %", "Status"];
+    const headers = [getColumnLabel(), "Actual (25-26)", "Forecast (26-27)", "Variance", "Variance %", "Status"];
     const csvData = filteredChartData.map(row => {
-      const variance = row.forecast - row.plan;
-      const variancePercent = row.plan > 0 ? (variance / row.plan) * 100 : 0;
-      const status = variance > 0 ? 'Cost Cutting Needed' : 'Under Budget';
+      const variance = row.forecast - row.actual;
+      const variancePercent = row.actual > 0 ? (variance / row.actual) * 100 : 0;
+      const status = variance > 0 ? 'Optimization Required' : 'Optimal Efficiency';
       return [
         row.name,
         row.actual,
-        row.plan,
         row.forecast,
         variance,
         variancePercent.toFixed(2) + '%',
@@ -363,7 +418,6 @@ export default function Dashboard() {
         head: row.head,
         subHead: row.subHead,
         actual: row.actual,
-        plan: row.plan,
         forecast: row.forecast
       });
     } else {
@@ -378,7 +432,6 @@ export default function Dashboard() {
             head: row.head,
             subHead: row.subHead,
             actual: row.actual,
-            plan: row.plan,
             forecast: row.forecast
           });
         });
@@ -398,7 +451,6 @@ export default function Dashboard() {
       head: tx.head,
       subHead: tx.subHead,
       actual: tx.actual,
-      plan: tx.plan,
       forecast: tx.forecast,
       isNewDept: false,
       isNewHead: false,
@@ -410,10 +462,39 @@ export default function Dashboard() {
     setIsFormOpen(true);
   };
 
+  const handleSnapshot = async () => {
+    const element = document.getElementById('dashboard-content');
+    if (!element) return;
+    
+    try {
+      const imgData = await htmlToImage.toPng(element, { quality: 0.95, backgroundColor: '#ffffff' });
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      
+      // We need to get the image dimensions to calculate the height properly
+      const img = new Image();
+      img.src = imgData;
+      img.onload = () => {
+        const pdfHeight = (img.height * pdfWidth) / img.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save('dashboard-snapshot.pdf');
+      };
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+    }
+  };
+
   return (
-    <div className="space-y-8">
-      {/* Formula Bar Toggle */}
-      <div className="flex justify-end">
+    <div id="dashboard-content" className="space-y-8">
+      {/* Formula Bar Toggle & Snapshot */}
+      <div className="flex justify-end gap-3">
+        <button 
+          onClick={handleSnapshot}
+          className="flex items-center gap-2 text-sm font-medium text-orange-600 hover:text-orange-800 dark:text-orange-400 dark:hover:text-orange-300 bg-orange-50 hover:bg-orange-100 dark:bg-orange-900/20 dark:hover:bg-orange-900/40 px-4 py-2 rounded-lg transition-colors"
+        >
+          <Camera className="w-4 h-4" />
+          Snapshot
+        </button>
         <button 
           onClick={() => setShowFormulas(!showFormulas)}
           className="flex items-center gap-2 text-sm font-medium text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 bg-blue-50 hover:bg-blue-100 dark:bg-blue-900/20 dark:hover:bg-blue-900/40 px-4 py-2 rounded-lg transition-colors"
@@ -434,7 +515,7 @@ export default function Dashboard() {
             <AlertCircle className="w-5 h-5 text-blue-500" />
             Dashboard Formulas & Methodology
           </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div>
               <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Forecasting</h3>
               <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
@@ -452,17 +533,44 @@ export default function Dashboard() {
                 Variance % = (Variance / Plan) * 100
               </div>
               <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li><strong>Positive Variance:</strong> Forecast exceeds plan (Cost Cutting Needed).</li>
-                <li><strong>Negative Variance:</strong> Forecast is below plan (Under Budget).</li>
+                <li><strong>Positive Variance:</strong> Forecast exceeds actual (Optimization Required).</li>
+                <li><strong>Negative Variance:</strong> Forecast is below actual (Optimal Efficiency).</li>
               </ul>
             </div>
             <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Sales vs Expenses</h3>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Sales & Expense Growth</h3>
               <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
-                Expense % of Sales = (Total Expenses / Total Sales) * 100
+                Growth % = ((Forecast - Actual) / Actual) * 100
               </div>
               <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li>Calculated separately for Actual, Plan, and Forecast periods.</li>
+                <li>Calculated for both Sales and Expenses to track year-over-year projected growth.</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Expense to Sales Ratio</h3>
+              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
+                Ratio % = (Total Expenses / Total Sales) * 100
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
+                <li>Measures operational efficiency. Lower percentage indicates higher profitability.</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Required Sales (50% Cost)</h3>
+              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
+                Req. Sales = Forecast Expenses / 0.5
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
+                <li>The target sales volume required to ensure expenses do not exceed 50% of revenue.</li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Department Expense Share</h3>
+              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
+                Share % = (Dept Expense / Total Company Expense) * 100
+              </div>
+              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
+                <li>Identifies which departments consume the largest portion of the budget.</li>
               </ul>
             </div>
           </div>
@@ -581,12 +689,24 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
           <div>
             <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-slate-300">Actual Sales (25-26) ₹</label>
-            <input 
-              type="number" 
-              value={sales.actual} 
-              onChange={e => setSales({...sales, actual: Number(e.target.value)})} 
-              className="w-full p-2.5 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-            />
+            <div className="flex gap-2">
+              <select 
+                value={selectedSalesMonth}
+                onChange={e => setSelectedSalesMonth(e.target.value)}
+                className="w-1/3 p-2.5 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              >
+                {Object.keys(monthlySales).map(month => (
+                  <option key={month} value={month}>{month}</option>
+                ))}
+              </select>
+              <input 
+                type="number" 
+                value={monthlySales[selectedSalesMonth]} 
+                onChange={e => setMonthlySales({...monthlySales, [selectedSalesMonth]: Number(e.target.value)})} 
+                className="w-2/3 p-2.5 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
+              />
+            </div>
+            <div className="text-xs text-slate-500 mt-1">Total Actual Sales: {formatCurrency(totalActualSales)}</div>
           </div>
           <div>
             <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-slate-300">Forecast Sales (26-27) ₹</label>
@@ -599,7 +719,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Sales Growth */}
           <div className="p-5 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30">
             <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2">
@@ -608,7 +728,7 @@ export default function Dashboard() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current FY25-26</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(sales.actual)}</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(totalActualSales)}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast FY26-27</span>
@@ -616,8 +736,8 @@ export default function Dashboard() {
               </div>
               <div className="pt-3 border-t border-blue-200 dark:border-blue-800/50 flex justify-between items-center">
                 <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Growth</span>
-                <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${sales.forecast >= sales.actual ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                  {sales.forecast >= sales.actual ? '+' : ''}{sales.actual > 0 ? (((sales.forecast - sales.actual) / sales.actual) * 100).toFixed(1) : 0}%
+                <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${sales.forecast >= totalActualSales ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                  {sales.forecast >= totalActualSales ? '+' : ''}{totalActualSales > 0 ? (((sales.forecast - totalActualSales) / totalActualSales) * 100).toFixed(1) : 0}%
                 </span>
               </div>
             </div>
@@ -654,7 +774,7 @@ export default function Dashboard() {
             <div className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current Ratio</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{sales.actual > 0 ? ((totals.actual / sales.actual) * 100).toFixed(1) : 0}%</span>
+                <span className="font-semibold text-slate-900 dark:text-white">{totalActualSales > 0 ? ((totals.actual / totalActualSales) * 100).toFixed(1) : 0}%</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast Ratio</span>
@@ -668,215 +788,101 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-
-          {/* Profitability & Variance */}
-          <div className="p-5 rounded-xl bg-emerald-50/50 dark:bg-emerald-900/10 border border-emerald-100 dark:border-emerald-800/30">
-            <h4 className="text-sm font-semibold text-emerald-800 dark:text-emerald-300 mb-4 flex items-center gap-2">
-              <DollarSign className="w-4 h-4" /> Profitability & Variance
-            </h4>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast Profit</span>
-                <span className="font-semibold text-emerald-600 dark:text-emerald-400">{formatCurrency(sales.forecast - totals.forecast)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Profit Margin</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{sales.forecast > 0 ? (((sales.forecast - totals.forecast) / sales.forecast) * 100).toFixed(1) : 0}%</span>
-              </div>
-              <div className="pt-3 border-t border-emerald-200 dark:border-emerald-800/50 flex justify-between items-center">
-                <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Budget Variance</span>
-                <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${totals.actual - totals.plan <= 0 ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                  {totals.actual - totals.plan > 0 ? '+' : ''}{formatCurrency(totals.actual - totals.plan)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {[
-          { title: "Total Actual (25-26)", value: totals.actual, color: "bg-blue-500", icon: <DollarSign className="w-5 h-5 text-blue-500" />, data: chartData.map(d => ({ value: d.actual })) },
-          { title: "Total Plan (25-26)", value: totals.plan, color: "bg-purple-500", icon: <Target className="w-5 h-5 text-purple-500" />, data: chartData.map(d => ({ value: d.plan })) },
-          { title: "Total Forecast (26-27)", value: totals.forecast, color: "bg-orange-500", icon: <Activity className="w-5 h-5 text-orange-500" />, data: chartData.map(d => ({ value: d.forecast })) },
-        ].map((kpi, i) => (
-          <motion.div 
-            key={i}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.1 }}
-            className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
-          >
-            <div className={`absolute top-0 left-0 w-1 h-full ${kpi.color}`} />
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">{kpi.title}</h3>
-                <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                  {kpi.icon}
-                </div>
-              </div>
-              <p className="text-3xl font-bold text-slate-900 dark:text-white">{formatCurrency(kpi.value)}</p>
-            </div>
-            <div className="h-12 mt-4 w-full opacity-50">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={kpi.data}>
-                  <Line type="monotone" dataKey="value" stroke={kpi.color.replace('bg-', 'text-').replace('500', '400')} strokeWidth={2} dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </motion.div>
-        ))}
-        
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
-        >
-          <div className={`absolute top-0 left-0 w-1 h-full ${variance >= 0 ? 'bg-red-500' : 'bg-green-500'}`} />
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Forecast vs Plan Variance</h3>
-              <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <ActivitySquare className={`w-5 h-5 ${variance >= 0 ? 'text-red-500' : 'text-green-500'}`} />
-              </div>
-            </div>
-            <div className="flex items-end gap-3">
-              <p className="text-3xl font-bold text-slate-900 dark:text-white">{formatCurrency(Math.abs(variance))}</p>
-              <div className={`flex items-center text-sm font-semibold mb-1 ${variance >= 0 ? 'text-red-500' : 'text-green-500'}`}>
-                {variance >= 0 ? <TrendingUp className="w-4 h-4 mr-1" /> : <TrendingDown className="w-4 h-4 mr-1" />}
-                {Math.abs(variancePercent).toFixed(1)}%
-              </div>
-            </div>
-          </div>
-          <div className="h-12 mt-4 w-full opacity-50">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData.map(d => ({ value: d.forecast - d.plan }))}>
-                <Line type="monotone" dataKey="value" stroke={variance >= 0 ? '#EF4444' : '#10B981'} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* AI Insights & Growth Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        {/* Insights & Guidance */}
-        <div className="lg:col-span-1 bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm flex flex-col">
-          <div className="flex items-center gap-2 mb-4">
-            <Brain className="w-5 h-5 text-purple-500" />
-            <h2 className="text-lg font-bold">AI Forecasting Insights & Department Analysis</h2>
-          </div>
-          <div className="flex-1 space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-            <div className="p-4 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-100 dark:border-green-800/50">
-              <h4 className="font-semibold text-green-800 dark:text-green-300 flex items-center gap-2">
-                <TrendingDown className="w-4 h-4" /> Recommended Cost Cutting
-              </h4>
-              <p className="text-sm text-green-700 dark:text-green-400 mt-1">
-                <strong>Marketing & Advertising:</strong> Reduce "Social Media" sub-head by 12%. Historical ROI shows diminishing returns above ₹2 Cr spend. Reallocate to R&D.
-              </p>
-            </div>
-            <div className="p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-100 dark:border-orange-800/50">
-              <h4 className="font-semibold text-orange-800 dark:text-orange-300 flex items-center gap-2">
-                <TrendingUp className="w-4 h-4" /> Recommended Investment
-              </h4>
-              <p className="text-sm text-orange-700 dark:text-orange-400 mt-1">
-                <strong>Procurement (Raw Materials):</strong> Increase budget by 18%. Global spice yield forecasts suggest a 15% price hike in Q3. Early bulk purchasing is advised.
-              </p>
-            </div>
-            
-            <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/50 mt-4">
-              <h4 className="font-semibold text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                <Brain className="w-4 h-4" /> Advanced Department Analysis
-              </h4>
-              <div className="space-y-3 mt-3">
-                <div className="border-l-2 border-blue-400 pl-3">
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-200">Production & Operations</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                    Variance analysis indicates a consistent 5% overspend in "Utility & Power". Suggest implementing IoT-based energy monitoring to cap utility expenses. Forecasts show a potential ₹15L saving annually.
-                  </p>
-                </div>
-                <div className="border-l-2 border-blue-400 pl-3">
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-200">Human Resources</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                    "Training & Development" is underutilized by 22% against the plan. Reallocating this to "Employee Retention" programs could mitigate the projected 8% increase in hiring costs for Q4.
-                  </p>
-                </div>
-                <div className="border-l-2 border-blue-400 pl-3">
-                  <p className="text-sm font-medium text-blue-900 dark:text-blue-200">Sales & Distribution</p>
-                  <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
-                    Logistics costs are scaling linearly with sales volume. Consider renegotiating 3PL contracts or transitioning to a hub-and-spoke model to achieve economies of scale, potentially reducing forecast variance by 3.5%.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
-        {/* Growth Analysis */}
-        <div className="lg:col-span-3 bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold">Growth Analysis (Forecast vs Actual)</h2>
-            <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-              <Filter className="w-4 h-4" />
-              <select 
-                value={selectedDept}
-                onChange={(e) => {
-                  setSelectedDept(e.target.value);
-                  setSelectedHead("All");
-                  setSelectedSubHead("All");
-                  setCurrentPage(1);
-                }}
-                className="bg-transparent border-none text-gray-700 dark:text-slate-300 text-sm focus:ring-0 cursor-pointer outline-none"
-              >
-                {dynamicDepartments.map(d => <option key={d} value={d}>{d === "All" ? "All Departments" : d}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="h-[400px]">
+        <div className="mt-8">
+          <h3 className="text-md font-bold mb-4 text-slate-900 dark:text-white">Sales vs Expenses Trend</h3>
+          <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <ComposedChart data={monthWiseData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} />
-                <YAxis stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`} />
+                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="left" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="right" orientation="right" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`} tickLine={false} axisLine={false} />
                 <RechartsTooltip 
+                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
                   contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                   formatter={(value: number) => formatCurrency(value)}
                 />
-                <Legend />
-                <Area type="monotone" dataKey="actual" name="Actual" fill="#3B82F6" stroke="#2563EB" fillOpacity={0.3} />
-                <Line type="monotone" dataKey="forecast" name="Forecast" stroke="#F97316" strokeWidth={3} dot={{ r: 4, fill: '#F97316', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6 }} />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Bar yAxisId="left" dataKey={(d) => monthlySales[d.name] || 0} name="Actual Sales" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="actual" name="Actual Expenses" stroke="#F97316" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                <Line yAxisId="right" type="monotone" dataKey="forecast" name="Forecast Expenses" stroke="#10B981" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
         </div>
       </div>
 
-      {/* Forecast Adjustments & Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold">Top 5 Highest Expenses (Forecast)</h2>
-            <div className="flex items-center gap-2 text-sm text-slate-500 bg-slate-50/50 dark:bg-slate-800/50 px-3 py-1.5 rounded-lg border border-gray-200 dark:border-gray-700">
-              <Filter className="w-4 h-4" />
-              <select 
-                value={selectedDept}
-                onChange={(e) => {
-                  setSelectedDept(e.target.value);
-                  setSelectedHead("All");
-                  setSelectedSubHead("All");
-                  setCurrentPage(1);
-                }}
-                className="bg-transparent border-none text-gray-700 dark:text-slate-300 text-sm focus:ring-0 cursor-pointer outline-none"
-              >
-                {dynamicDepartments.map(d => <option key={d} value={d}>{d === "All" ? "All Departments" : d}</option>)}
-              </select>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+        >
+          <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Avg Monthly Spend</h3>
+              <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                <DollarSign className="w-5 h-5 text-blue-500" />
+              </div>
             </div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(avgMonthlyExpense)}</p>
+            <p className="text-xs text-slate-500 mt-2">Baseline run-rate (Last 12M)</p>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+        >
+          <div className="absolute top-0 left-0 w-1 h-full bg-orange-500" />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Dept Expense Share</h3>
+              <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                <Activity className="w-5 h-5 text-orange-500" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{deptExpenseShare.toFixed(1)}%</p>
+            <p className="text-xs text-slate-500 mt-2">Of total company expense</p>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3 }}
+          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+        >
+          <div className="absolute top-0 left-0 w-1 h-full bg-purple-500" />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Sales Efficiency</h3>
+              <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                <Target className="w-5 h-5 text-purple-500" />
+              </div>
+            </div>
+            <p className="text-2xl font-bold text-slate-900 dark:text-white">{salesToDeptRatio.toFixed(2)}x</p>
+            <p className="text-xs text-slate-500 mt-2">Sales to Department Ratio</p>
+          </div>
+        </motion.div>
+      </div>
+
+      {/* Forecast Adjustments & Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-bold">Top 3 Overspending {getColumnLabel()}s</h2>
           </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={chartData.slice(0, 5)} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
+              <BarChart layout="vertical" data={chartData.filter(d => d.actual > d.forecast).sort((a, b) => (b.actual - b.forecast) - (a.actual - a.forecast)).slice(0, 3)} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
                 <XAxis type="number" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`} />
                 <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} width={100} />
@@ -885,50 +891,32 @@ export default function Dashboard() {
                   contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
                   formatter={(value: number) => formatCurrency(value)}
                 />
-                <Bar dataKey="forecast" name="Forecast" radius={[0, 4, 4, 0]}>
-                  {chartData.slice(0, 5).map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Bar>
+                <Bar dataKey="actual" name="Actual" fill="#EF4444" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="forecast" name="Forecast" fill="#F59E0B" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-        
-        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm flex flex-col">
-          <h2 className="text-lg font-bold mb-6 flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-blue-500" />
-            Forecast Adjustments
-          </h2>
-          <div className="flex-1 overflow-y-auto pr-2 space-y-4 max-h-80">
-            {chartData.map(item => {
-              const adj = forecastAdjustments[item.name] || 0;
-              const diff = item.forecast - item.originalForecast;
-              
-              return (
-                <div key={item.name} className="p-4 border border-gray-200 dark:border-gray-700 rounded-xl bg-slate-50/50 dark:bg-slate-800/50/50">
-                  <div className="flex justify-between items-start mb-3">
-                    <span className="font-medium text-sm text-slate-900 dark:text-white">{item.name}</span>
-                    <div className="text-right">
-                      <div className={`text-sm font-bold ${adj > 0 ? 'text-green-600 dark:text-green-400' : adj < 0 ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-slate-400'}`}>
-                        {adj > 0 ? '+' : ''}{formatCurrency(diff)}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        vs Original ({adj > 0 ? '+' : ''}{adj}%)
-                      </div>
-                    </div>
-                  </div>
-                  <input 
-                    type="range" 
-                    min="-50" 
-                    max="50" 
-                    value={adj} 
-                    onChange={(e) => setForecastAdjustments(prev => ({ ...prev, [item.name]: Number(e.target.value) }))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-blue-600"
-                  />
-                </div>
-              );
-            })}
+
+        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-bold">Top 3 Underspending {getColumnLabel()}s</h2>
+          </div>
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart layout="vertical" data={chartData.filter(d => d.actual < d.forecast).sort((a, b) => (b.forecast - b.actual) - (a.forecast - a.actual)).slice(0, 3)} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+                <XAxis type="number" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`} />
+                <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} width={100} />
+                <RechartsTooltip 
+                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
+                  formatter={(value: number) => formatCurrency(value)}
+                />
+                <Bar dataKey="actual" name="Actual" fill="#10B981" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="forecast" name="Forecast" fill="#F59E0B" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>
@@ -940,19 +928,29 @@ export default function Dashboard() {
             <h2 className="text-lg font-bold">
               Budget Comparison {getLevelLabel()}
             </h2>
-            <select
-              value={barChartMetric}
-              onChange={(e) => setBarChartMetric(e.target.value as any)}
-              className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
-            >
-              <option value="all">All Metrics</option>
-              <option value="actual_vs_plan">Actual vs Plan</option>
-              <option value="actual_vs_forecast">Actual vs Forecast</option>
-            </select>
+            <div className="flex gap-2">
+              <select
+                value={budgetComparisonView}
+                onChange={(e) => setBudgetComparisonView(e.target.value)}
+                className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
+              >
+                <option value="department">By Department</option>
+                <option value="month">By Month</option>
+              </select>
+              <select
+                value={budgetComparisonMetric}
+                onChange={(e) => setBudgetComparisonMetric(e.target.value)}
+                className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
+              >
+                <option value="all">All Metrics</option>
+                <option value="actual">Actual Only</option>
+                <option value="forecast">Forecast Only</option>
+              </select>
+            </div>
           </div>
           <div className="h-80">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData.slice(0, 10)} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <BarChart data={budgetComparisonData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
                 <XAxis 
                   dataKey="name" 
@@ -974,13 +972,10 @@ export default function Dashboard() {
                   formatter={(value: number) => formatCurrency(value)}
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                {(barChartMetric === 'all' || barChartMetric === 'actual_vs_plan' || barChartMetric === 'actual_vs_forecast') && (
+                {(budgetComparisonMetric === 'all' || budgetComparisonMetric === 'actual') && (
                   <Bar dataKey="actual" name="Actual (25-26)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
                 )}
-                {(barChartMetric === 'all' || barChartMetric === 'actual_vs_plan') && (
-                  <Bar dataKey="plan" name="Plan (25-26)" fill="#A855F7" radius={[4, 4, 0, 0]} />
-                )}
-                {(barChartMetric === 'all' || barChartMetric === 'actual_vs_forecast') && (
+                {(budgetComparisonMetric === 'all' || budgetComparisonMetric === 'forecast') && (
                   <Bar dataKey="forecast" name="Forecast (26-27)" fill="#F97316" radius={[4, 4, 0, 0]} />
                 )}
               </BarChart>
@@ -991,7 +986,7 @@ export default function Dashboard() {
         <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold">
-              Budget Distribution {getLevelLabel()}
+              Department Share Chart {getLevelLabel()}
             </h2>
             <select
               value={pieChartMetric}
@@ -999,11 +994,10 @@ export default function Dashboard() {
               className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
             >
               <option value="actual">Actual</option>
-              <option value="plan">Plan</option>
               <option value="forecast">Forecast</option>
             </select>
           </div>
-          <div className="h-80">
+          <div className="h-80 relative">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
                 <Pie
@@ -1014,27 +1008,7 @@ export default function Dashboard() {
                   outerRadius={120}
                   paddingAngle={5}
                   dataKey="value"
-                  label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
-                    const RADIAN = Math.PI / 180;
-                    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-                    const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                    const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                    return (
-                      <text 
-                        x={x} 
-                        y={y} 
-                        fill="white" 
-                        textAnchor="middle" 
-                        dominantBaseline="central" 
-                        fontSize={12} 
-                        fontWeight="bold"
-                        style={{ textShadow: '0px 1px 2px rgba(0,0,0,0.8)' }}
-                      >
-                        {`${(percent * 100).toFixed(0)}%`}
-                      </text>
-                    );
-                  }}
-                  labelLine={false}
+                  stroke="none"
                 >
                   {pieChartData.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
@@ -1042,11 +1016,26 @@ export default function Dashboard() {
                 </Pie>
                 <RechartsTooltip 
                   contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value: number, name: string, props: any) => {
+                    const total = pieChartData.reduce((sum, d) => sum + d.value, 0);
+                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                    return [`${formatCurrency(value)} (${percent}%)`, name];
+                  }}
                 />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Legend 
+                  layout="vertical" 
+                  verticalAlign="middle" 
+                  align="right"
+                  wrapperStyle={{ fontSize: '12px', color: '#9CA3AF' }}
+                />
               </PieChart>
             </ResponsiveContainer>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <p className="text-sm text-slate-500 dark:text-slate-400">Total {pieChartMetric === 'actual' ? 'Actual' : 'Forecast'}</p>
+                <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(pieChartMetric === 'actual' ? totals.actual : totals.forecast)}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -1056,7 +1045,7 @@ export default function Dashboard() {
         <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h2 className="text-lg font-bold">Variance Analysis {getLevelLabel()}</h2>
-            <p className="text-sm text-slate-500 mt-1">Comparing Forecast vs Plan to identify cost cutting or investment opportunities.</p>
+            <p className="text-sm text-slate-500 mt-1">Comparing Forecast vs Actual to identify optimization or investment opportunities.</p>
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
             <div className="relative flex-1 sm:w-64">
@@ -1085,23 +1074,21 @@ export default function Dashboard() {
               <tr>
                 <th className="px-6 py-4 font-medium">{getColumnLabel()}</th>
                 <th className="px-6 py-4 font-medium text-right">Actual (25-26)</th>
-                <th className="px-6 py-4 font-medium text-right">Plan (25-26)</th>
                 <th className="px-6 py-4 font-medium text-right">Forecast (26-27)</th>
-                <th className="px-6 py-4 font-medium text-right">Variance (Fcst vs Plan)</th>
+                <th className="px-6 py-4 font-medium text-right">Variance (Fcst vs Actual)</th>
                 <th className="px-6 py-4 font-medium text-center">Status</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
               {filteredChartData.map((row, i) => {
-                const variance = row.forecast - row.plan;
-                const variancePercent = row.plan > 0 ? (variance / row.plan) * 100 : 0;
+                const variance = row.forecast - row.actual;
+                const variancePercent = row.actual > 0 ? (variance / row.actual) * 100 : 0;
                 const isOverBudget = variance > 0;
                 
                 return (
                   <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{row.name}</td>
                     <td className="px-6 py-4 text-right font-mono text-slate-500">{formatCurrency(row.actual)}</td>
-                    <td className="px-6 py-4 text-right font-mono text-slate-500">{formatCurrency(row.plan)}</td>
                     <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">{formatCurrency(row.forecast)}</td>
                     <td className="px-6 py-4 text-right font-mono">
                       <div className={`flex items-center justify-end gap-1 ${isOverBudget ? 'text-red-500' : 'text-green-500'}`}>
@@ -1115,7 +1102,7 @@ export default function Dashboard() {
                           ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' 
                           : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
                       }`}>
-                        {isOverBudget ? 'Cost Cutting Needed' : 'Under Budget'}
+                        {isOverBudget ? 'Optimization Required' : 'Optimal Efficiency'}
                       </span>
                     </td>
                   </tr>
@@ -1168,7 +1155,6 @@ export default function Dashboard() {
                 <th className="px-6 py-4 font-medium">Head</th>
                 <th className="px-6 py-4 font-medium">Sub Head</th>
                 <th className="px-6 py-4 font-medium text-right">Actual (25-26)</th>
-                <th className="px-6 py-4 font-medium text-right">Plan (25-26)</th>
                 <th className="px-6 py-4 font-medium text-right">Forecast (26-27)</th>
                 <th className="px-6 py-4 font-medium text-center">Actions</th>
               </tr>
@@ -1181,7 +1167,6 @@ export default function Dashboard() {
                   <td className="px-6 py-4 text-gray-600 dark:text-slate-300">{tx.head}</td>
                   <td className="px-6 py-4 text-slate-500 dark:text-slate-400">{tx.subHead}</td>
                   <td className="px-6 py-4 text-right font-mono">{formatCurrency(tx.actual)}</td>
-                  <td className="px-6 py-4 text-right font-mono">{formatCurrency(tx.plan)}</td>
                   <td className="px-6 py-4 text-right font-mono text-orange-600 dark:text-orange-400">{formatCurrency(tx.forecast)}</td>
                   <td className="px-6 py-4 text-center">
                     <div className="flex items-center justify-center gap-2">
@@ -1529,10 +1514,6 @@ export default function Dashboard() {
                     <div>
                       <label className="block text-sm font-medium mb-1">Actual (25-26) ₹</label>
                       <input required type="number" value={row.actual} onChange={e => updateRow(index, { actual: Number(e.target.value) })} className="w-full p-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white" />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium mb-1">Plan (26-27) ₹</label>
-                      <input required type="number" value={row.plan} onChange={e => updateRow(index, { plan: Number(e.target.value) })} className="w-full p-2.5 bg-white/50 dark:bg-slate-800/50 backdrop-blur-sm border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white" />
                     </div>
                     <div className="col-span-2">
                       <label className="block text-sm font-medium mb-1">Forecast (26-27) ₹</label>

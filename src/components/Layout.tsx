@@ -1,15 +1,34 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTheme } from '../context/ThemeContext';
 import { useAppContext } from '../context/AppContext';
-import { Moon, Sun, Upload, Edit2, Check, Maximize, Minimize } from 'lucide-react';
+import { Moon, Sun, Maximize, Minimize, Edit2, Upload } from 'lucide-react';
+import { motion } from 'motion/react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme } = useTheme();
-  const { companyName, setCompanyName, logoUrl, setLogoUrl } = useAppContext();
+  const { companyName, setCompanyName, logo, setLogo } = useAppContext();
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(companyName);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogo(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (tempName.trim()) {
+      setCompanyName(tempName.trim());
+      setIsEditingName(false);
+    }
+  };
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -27,78 +46,81 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const handleNameSave = () => {
-    setCompanyName(tempName);
-    setIsEditingName(false);
-  };
-
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogoUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
-      <header className="sticky top-0 z-50 w-full border-b border-slate-200/50 dark:border-slate-800/50 bg-white/70 dark:bg-slate-950/70 backdrop-blur-xl">
-        <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-50 w-full border-b border-slate-200/50 dark:border-slate-800/50 bg-white/70 dark:bg-slate-900/90 backdrop-blur-xl overflow-hidden">
+        {/* Animated Spices Background */}
+        <div className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-30 flex items-center justify-around overflow-hidden">
+          <motion.img 
+            src="https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=100&h=100&fit=crop&q=80" 
+            alt="Cardamom"
+            className="w-12 h-12 rounded-full object-cover mix-blend-multiply dark:mix-blend-screen"
+            animate={{ y: [-10, 10, -10], rotate: [0, 10, -10, 0] }}
+            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.img 
+            src="https://images.unsplash.com/photo-1509358271058-acd22cc93898?w=100&h=100&fit=crop&q=80" 
+            alt="Black Pepper"
+            className="w-10 h-10 rounded-full object-cover mix-blend-multiply dark:mix-blend-screen"
+            animate={{ y: [10, -10, 10], rotate: [0, -15, 15, 0] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <motion.img 
+            src="https://images.unsplash.com/photo-1611078813435-08e8cb2f8f78?w=100&h=100&fit=crop&q=80" 
+            alt="Clove"
+            className="w-14 h-14 rounded-full object-cover mix-blend-multiply dark:mix-blend-screen"
+            animate={{ y: [-5, 15, -5], rotate: [0, 20, -20, 0] }}
+            transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+          />
+        </div>
+
+        <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between relative z-10">
           <div className="flex items-center gap-4">
-            <div 
-              className="relative group cursor-pointer w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              {logoUrl ? (
-                <img src={logoUrl} alt="Logo" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-orange-600 dark:text-orange-400 font-bold text-xl">
-                  {companyName.charAt(0).toUpperCase()}
-                </span>
-              )}
-              <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                <Upload className="w-4 h-4 text-white" />
+            <div className="relative group">
+              <label className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors relative">
+                <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                {logo ? (
+                  <img src={logo} alt="Company Logo" className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-orange-600 dark:text-orange-400 font-bold text-xl">
+                    {companyName.charAt(0).toUpperCase()}
+                  </span>
+                )}
+                <div className="absolute inset-0 bg-black/50 items-center justify-center hidden group-hover:flex">
+                  <Upload className="w-4 h-4 text-white" />
+                </div>
+              </label>
+              <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity">
+                Upload Logo
               </div>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleLogoUpload} 
-                accept="image/*" 
-                className="hidden" 
-              />
             </div>
             
-            {isEditingName ? (
-              <div className="flex items-center gap-2">
-                <input 
-                  type="text" 
-                  value={tempName}
-                  onChange={(e) => setTempName(e.target.value)}
-                  className="px-2 py-1 bg-gray-100 dark:bg-gray-800 border border-gray-300 dark:border-gray-700 rounded text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  autoFocus
-                  onKeyDown={(e) => e.key === 'Enter' && handleNameSave()}
-                />
-                <button onClick={handleNameSave} className="p-1 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded">
-                  <Check className="w-4 h-4" />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 group">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
-                  {companyName}
-                </h1>
-                <button 
-                  onClick={() => setIsEditingName(true)}
-                  className="p-1 text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
-                  title="Rename Company"
-                >
-                  <Edit2 className="w-4 h-4" />
-                </button>
-              </div>
-            )}
+            <div className="flex items-center gap-2 group">
+              {isEditingName ? (
+                <form onSubmit={handleNameSubmit} className="flex items-center">
+                  <input
+                    type="text"
+                    value={tempName}
+                    onChange={(e) => setTempName(e.target.value)}
+                    onBlur={handleNameSubmit}
+                    autoFocus
+                    className="text-xl font-bold bg-transparent border-b-2 border-orange-500 outline-none text-slate-900 dark:text-white px-1 w-48"
+                  />
+                </form>
+              ) : (
+                <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsEditingName(true)}>
+                  <h1 
+                    className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent hover:opacity-80 transition-opacity"
+                    title="Click to edit company name"
+                  >
+                    {companyName}
+                  </h1>
+                  <button className="p-1 text-slate-400 hover:text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Edit Company Name">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
           
           <div className="flex items-center gap-4">
