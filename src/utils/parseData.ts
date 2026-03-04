@@ -7,7 +7,7 @@ export function parseCsvData(csv: string): Transaction[] {
   const months = ['04', '05', '06', '07', '08', '09', '10', '11', '12', '01', '02'];
   const years = ['2025', '2025', '2025', '2025', '2025', '2025', '2025', '2025', '2025', '2026', '2026'];
   
-  for (let i = 2; i < lines.length; i++) {
+  for (let i = 3; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line || line.startsWith(',,,')) continue;
     
@@ -28,16 +28,16 @@ export function parseCsvData(csv: string): Transaction[] {
     }
     fields.push(currentField.trim());
     
-    if (fields.length < 3) continue;
+    if (fields.length < 4) continue;
 
-    const department = fields[0];
-    const head = fields[1];
-    const subHead = fields[2];
+    const department = fields[1];
+    const head = fields[2];
+    const subHead = fields[3];
     
     if (!department) continue;
     
     for (let m = 0; m < 11; m++) {
-      const valStr = fields[3 + m];
+      const valStr = fields[4 + m];
       if (!valStr || valStr === '-' || valStr === '') continue;
       
       const actual = parseFloat(valStr.replace(/,/g, ''));

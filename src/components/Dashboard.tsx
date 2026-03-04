@@ -46,7 +46,7 @@ export default function Dashboard() {
   });
   const [selectedSalesMonth, setSelectedSalesMonth] = useState('Apr');
   
-  const totalActualSales = useMemo(() => Object.values(monthlySales).reduce((a, b) => a + b, 0), [monthlySales]);
+  const totalActualSales = useMemo(() => Object.values(monthlySales).reduce((a: number, b: number) => a + b, 0), [monthlySales]);
 
   // Dynamic Departments based on transactions
   const dynamicDepartments = useMemo(() => {

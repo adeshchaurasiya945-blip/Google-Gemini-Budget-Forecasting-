@@ -76,8 +76,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between relative z-10">
           <div className="flex items-center gap-4">
-            <div className="relative group">
-              <label className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors relative">
+            <div className="relative">
+              <label className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50 cursor-pointer hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors relative group">
                 <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                 {logo ? (
                   <img src={logo} alt="Company Logo" className="w-full h-full object-cover" />
@@ -86,16 +86,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     {companyName.charAt(0).toUpperCase()}
                   </span>
                 )}
-                <div className="absolute inset-0 bg-black/50 items-center justify-center hidden group-hover:flex">
+                <div className="absolute inset-0 bg-black/50 items-center justify-center flex opacity-0 group-hover:opacity-100 transition-opacity">
                   <Upload className="w-4 h-4 text-white" />
                 </div>
               </label>
-              <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[10px] text-slate-500 opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity">
-                Upload Logo
+              <div className="absolute -bottom-1 -right-1 bg-white dark:bg-slate-800 rounded-full p-0.5 shadow-sm border border-slate-200 dark:border-slate-700 pointer-events-none">
+                <Upload className="w-3 h-3 text-slate-500" />
               </div>
             </div>
             
-            <div className="flex items-center gap-2 group">
+            <div className="flex items-center gap-2">
               {isEditingName ? (
                 <form onSubmit={handleNameSubmit} className="flex items-center">
                   <input
@@ -108,15 +108,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   />
                 </form>
               ) : (
-                <div className="flex items-center gap-2 cursor-pointer" onClick={() => setIsEditingName(true)}>
+                <div className="flex items-center gap-2 cursor-pointer group" onClick={() => setIsEditingName(true)}>
                   <h1 
                     className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent hover:opacity-80 transition-opacity"
                     title="Click to edit company name"
                   >
                     {companyName}
                   </h1>
-                  <button className="p-1 text-slate-400 hover:text-orange-500 opacity-0 group-hover:opacity-100 transition-opacity" title="Edit Company Name">
-                    <Edit2 className="w-4 h-4" />
+                  <button className="p-1 text-slate-400 hover:text-orange-500 transition-colors bg-slate-100 dark:bg-slate-800 rounded-md" title="Edit Company Name">
+                    <Edit2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               )}
