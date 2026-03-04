@@ -28,10 +28,22 @@ interface AppContextType {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [companyName, setCompanyName] = useState('Global Spices Co.');
-  const [logo, setLogo] = useState<string | null>(null);
+  const [companyName, setCompanyName] = useState(() => localStorage.getItem('companyName') || 'Global Spices Co.');
+  const [logo, setLogo] = useState<string | null>(() => localStorage.getItem('companyLogo'));
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    localStorage.setItem('companyName', companyName);
+  }, [companyName]);
+
+  useEffect(() => {
+    if (logo) {
+      localStorage.setItem('companyLogo', logo);
+    } else {
+      localStorage.removeItem('companyLogo');
+    }
+  }, [logo]);
 
   useEffect(() => {
     fetchTransactions();

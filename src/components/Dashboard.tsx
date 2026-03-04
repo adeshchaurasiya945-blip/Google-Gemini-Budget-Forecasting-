@@ -3,12 +3,12 @@ import { useAppContext } from '../context/AppContext';
 import { formatCurrency } from '../utils/formatters';
 import { motion } from 'motion/react';
 import { 
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, LabelList,
   PieChart, Pie, Cell, ComposedChart, Area, Line, LineChart
 } from 'recharts';
 import * as htmlToImage from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare, Camera } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare, Camera, PieChart as PieChartIcon } from 'lucide-react';
 
 const DEPARTMENTS = [
   "All",
@@ -40,11 +40,11 @@ export default function Dashboard() {
   });
   
   const [monthlySales, setMonthlySales] = useState<Record<string, number>>({
-    'Jan': 8000000, 'Feb': 8500000, 'Mar': 9000000, 'Apr': 8000000, 
-    'May': 8200000, 'Jun': 8400000, 'Jul': 8600000, 'Aug': 8800000, 
-    'Sep': 9000000, 'Oct': 9200000, 'Nov': 9400000, 'Dec': 9600000
+    'Apr': 8000000, 'May': 8200000, 'Jun': 8400000, 'Jul': 8600000, 
+    'Aug': 8800000, 'Sep': 9000000, 'Oct': 9200000, 'Nov': 9400000, 
+    'Dec': 9600000, 'Jan': 8000000, 'Feb': 8500000, 'Mar': 9000000
   });
-  const [selectedSalesMonth, setSelectedSalesMonth] = useState('Apr');
+  const [isSalesFormOpen, setIsSalesFormOpen] = useState(false);
   
   const totalActualSales = useMemo(() => Object.values(monthlySales).reduce((a: number, b: number) => a + b, 0), [monthlySales]);
 
@@ -193,6 +193,7 @@ export default function Dashboard() {
   const totalCompanyExpense = useMemo(() => transactions.reduce((sum, t) => sum + t.actual, 0), [transactions]);
   const deptExpenseShare = totalCompanyExpense > 0 ? (totals.actual / totalCompanyExpense) * 100 : 0;
   const salesToDeptRatio = totals.actual > 0 ? (totalActualSales / totals.actual) : 0;
+  const forecastExpenseToSalesRatio = sales.forecast > 0 ? (totals.forecast / sales.forecast) * 100 : 0;
   
   const { fixedCost, variableCost } = useMemo(() => {
     const fixedKeywords = ['salaries', 'rent', 'amc', 'insurance', 'fixed', 'wages', 'personnel', 'benefits'];
@@ -299,6 +300,31 @@ export default function Dashboard() {
       .map(([name, value]) => ({ name, value: Number(value) }))
       .sort((a, b) => b.value - a.value);
   }, [filteredTransactions, selectedDept, selectedHead, pieChartMetric, forecastAdjustments]);
+
+  const headShareData = useMemo(() => {
+    const headTotals = filteredTransactions.reduce((acc, curr) => {
+      const key = curr.head;
+      if (!acc[key]) acc[key] = 0;
+      
+      let val = curr[pieChartMetric];
+      if (pieChartMetric === 'forecast') {
+        const adj = forecastAdjustments[key] || 0;
+        val = val * (1 + adj / 100);
+      }
+      acc[key] += val;
+      return acc;
+    }, {} as Record<string, number>);
+    
+    const total = Object.values(headTotals).reduce((sum, val) => sum + val, 0);
+    
+    return Object.entries(headTotals)
+      .map(([name, value]) => ({ 
+        name, 
+        value: Number(value),
+        percent: total > 0 ? (Number(value) / total) * 100 : 0
+      }))
+      .sort((a, b) => b.value - a.value);
+  }, [filteredTransactions, pieChartMetric, forecastAdjustments]);
 
   const COLORS = ['#3B82F6', '#8B5CF6', '#F97316', '#10B981', '#EF4444', '#F59E0B', '#6366F1', '#EC4899', '#14B8A6', '#84CC16'];
 
@@ -665,7 +691,13 @@ export default function Dashboard() {
             </div>
           </>
         )}
-        <div className="ml-auto">
+        <div className="ml-auto flex gap-2">
+          <button 
+            onClick={() => setIsSalesFormOpen(true)}
+            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-white px-4 py-2.5 rounded-lg font-medium transition-colors"
+          >
+            <Target className="w-4 h-4" /> Sales Settings
+          </button>
           <button 
             onClick={() => {
               setEditingId(null);
@@ -686,40 +718,7 @@ export default function Dashboard() {
           <h2 className="text-lg font-bold">Sales & Expense Forecast Analysis</h2>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <div>
-            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-slate-300">Actual Sales (25-26) ₹</label>
-            <div className="flex gap-2">
-              <select 
-                value={selectedSalesMonth}
-                onChange={e => setSelectedSalesMonth(e.target.value)}
-                className="w-1/3 p-2.5 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              >
-                {Object.keys(monthlySales).map(month => (
-                  <option key={month} value={month}>{month}</option>
-                ))}
-              </select>
-              <input 
-                type="number" 
-                value={monthlySales[selectedSalesMonth]} 
-                onChange={e => setMonthlySales({...monthlySales, [selectedSalesMonth]: Number(e.target.value)})} 
-                className="w-2/3 p-2.5 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-              />
-            </div>
-            <div className="text-xs text-slate-500 mt-1">Total Actual Sales: {formatCurrency(totalActualSales)}</div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 text-gray-700 dark:text-slate-300">Forecast Sales (26-27) ₹</label>
-            <input 
-              type="number" 
-              value={sales.forecast} 
-              onChange={e => setSales({...sales, forecast: Number(e.target.value)})} 
-              className="w-full p-2.5 bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 rounded-lg text-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500 outline-none transition-all" 
-            />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
           {/* Sales Growth */}
           <div className="p-5 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30">
             <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2">
@@ -806,8 +805,7 @@ export default function Dashboard() {
                 />
                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
                 <Bar yAxisId="left" dataKey={(d) => monthlySales[d.name] || 0} name="Actual Sales" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="actual" name="Actual Expenses" stroke="#F97316" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                <Line yAxisId="right" type="monotone" dataKey="forecast" name="Forecast Expenses" stroke="#10B981" strokeWidth={3} strokeDasharray="5 5" dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                <Bar yAxisId="right" dataKey="actual" name="Actual Expenses" fill="#F97316" radius={[4, 4, 0, 0]} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -815,23 +813,22 @@ export default function Dashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
         >
           <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Avg Monthly Spend</h3>
-              <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <DollarSign className="w-5 h-5 text-blue-500" />
+              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Actual (25-26)</h3>
+              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                <DollarSign className="w-4 h-4 text-blue-500" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{formatCurrency(avgMonthlyExpense)}</p>
-            <p className="text-xs text-slate-500 mt-2">Baseline run-rate (Last 12M)</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(totals.actual)}</p>
           </div>
         </motion.div>
 
@@ -839,18 +836,17 @@ export default function Dashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
         >
-          <div className="absolute top-0 left-0 w-1 h-full bg-orange-500" />
+          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Dept Expense Share</h3>
-              <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <Activity className="w-5 h-5 text-orange-500" />
+              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Forecast (26-27)</h3>
+              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                <TrendingUp className="w-4 h-4 text-emerald-500" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{deptExpenseShare.toFixed(1)}%</p>
-            <p className="text-xs text-slate-500 mt-2">Of total company expense</p>
+            <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(totals.forecast)}</p>
           </div>
         </motion.div>
 
@@ -858,71 +854,95 @@ export default function Dashboard() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.3 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
         >
-          <div className="absolute top-0 left-0 w-1 h-full bg-purple-500" />
+          <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
           <div>
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-medium text-slate-500 dark:text-slate-400">Sales Efficiency</h3>
-              <div className="p-2 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <Target className="w-5 h-5 text-purple-500" />
+              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Variance</h3>
+              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                <AlertCircle className="w-4 h-4 text-red-500" />
               </div>
             </div>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white">{salesToDeptRatio.toFixed(2)}x</p>
-            <p className="text-xs text-slate-500 mt-2">Sales to Department Ratio</p>
+            <p className={`text-xl font-bold ${variance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+              {variance > 0 ? '+' : ''}{formatCurrency(variance)}
+            </p>
+          </div>
+        </motion.div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.4 }}
+          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+        >
+          <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast vs Sales</h3>
+              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                <PieChartIcon className="w-4 h-4 text-indigo-500" />
+              </div>
+            </div>
+            <p className="text-xl font-bold text-slate-900 dark:text-white">{forecastExpenseToSalesRatio.toFixed(1)}%</p>
           </div>
         </motion.div>
       </div>
 
-      {/* Forecast Adjustments & Analysis */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold">Top 3 Overspending {getColumnLabel()}s</h2>
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={chartData.filter(d => d.actual > d.forecast).sort((a, b) => (b.actual - b.forecast) - (a.actual - a.forecast)).slice(0, 3)} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-                <XAxis type="number" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`} />
-                <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} width={100} />
-                <RechartsTooltip 
-                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number) => formatCurrency(value)}
-                />
-                <Bar dataKey="actual" name="Actual" fill="#EF4444" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="forecast" name="Forecast" fill="#F59E0B" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold">Top 3 Underspending {getColumnLabel()}s</h2>
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart layout="vertical" data={chartData.filter(d => d.actual < d.forecast).sort((a, b) => (b.forecast - b.actual) - (a.forecast - a.actual)).slice(0, 3)} margin={{ top: 20, right: 30, left: 60, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-                <XAxis type="number" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 100000).toFixed(0)}L`} />
-                <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} width={100} />
-                <RechartsTooltip 
-                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number) => formatCurrency(value)}
-                />
-                <Bar dataKey="actual" name="Actual" fill="#10B981" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="forecast" name="Forecast" fill="#F59E0B" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-lg font-bold">
+              Total Expenses Value & %
+            </h2>
+            <select
+              value={pieChartMetric}
+              onChange={(e) => setPieChartMetric(e.target.value as any)}
+              className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
+            >
+              <option value="actual">Actual</option>
+              <option value="forecast">Forecast</option>
+            </select>
+          </div>
+          <div className="h-80 relative">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pieChartData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={80}
+                  outerRadius={120}
+                  paddingAngle={5}
+                  dataKey="value"
+                  stroke="none"
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  labelLine={false}
+                >
+                  {pieChartData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <RechartsTooltip 
+                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
+                  formatter={(value: number, name: string, props: any) => {
+                    const total = pieChartData.reduce((sum, d) => sum + d.value, 0);
+                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                    return [`${formatCurrency(value)} (${percent}%)`, name];
+                  }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="text-center">
+                <p className="text-xs text-slate-500 dark:text-slate-400">Total {pieChartMetric === 'actual' ? 'Actual' : 'Forecast'}</p>
+                <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(pieChartMetric === 'actual' ? totals.actual : totals.forecast)}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold">
@@ -986,7 +1006,7 @@ export default function Dashboard() {
         <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold">
-              Department Share Chart {getLevelLabel()}
+              Head-wise Expenses Share
             </h2>
             <select
               value={pieChartMetric}
@@ -997,51 +1017,37 @@ export default function Dashboard() {
               <option value="forecast">Forecast</option>
             </select>
           </div>
-          <div className="h-80 relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieChartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={120}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="none"
-                >
-                  {pieChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
+          <div className="h-80 overflow-y-auto pr-2">
+            <ResponsiveContainer width="100%" height={Math.max(320, headShareData.length * 40)}>
+              <BarChart layout="vertical" data={headShareData} margin={{ top: 5, right: 120, left: 100, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+                <XAxis type="number" hide />
+                <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} width={100} />
                 <RechartsTooltip 
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number, name: string, props: any) => {
-                    const total = pieChartData.reduce((sum, d) => sum + d.value, 0);
-                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                    return [`${formatCurrency(value)} (${percent}%)`, name];
-                  }}
+                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
+                  formatter={(value: number, name: string, props: any) => [`${formatCurrency(value)} (${props.payload.percent.toFixed(1)}%)`, 'Value']}
                 />
-                <Legend 
-                  layout="vertical" 
-                  verticalAlign="middle" 
-                  align="right"
-                  wrapperStyle={{ fontSize: '12px', color: '#9CA3AF' }}
-                />
-              </PieChart>
+                <Bar dataKey="value" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+                  <LabelList 
+                    dataKey="value" 
+                    position="right" 
+                    formatter={(value: number) => {
+                      const item = headShareData.find(d => d.value === value);
+                      return `${formatCurrency(value)} (${item?.percent.toFixed(1)}%)`;
+                    }}
+                    fill="currentColor"
+                    className="text-slate-700 dark:text-slate-300 text-xs font-medium"
+                  />
+                </Bar>
+              </BarChart>
             </ResponsiveContainer>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center">
-                <p className="text-sm text-slate-500 dark:text-slate-400">Total {pieChartMetric === 'actual' ? 'Actual' : 'Forecast'}</p>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(pieChartMetric === 'actual' ? totals.actual : totals.forecast)}</p>
-              </div>
-            </div>
           </div>
         </div>
       </div>
 
       {/* Department Analysis Table */}
-      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden">
+      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden mb-6">
         <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h2 className="text-lg font-bold">Variance Analysis {getLevelLabel()}</h2>
@@ -1114,7 +1120,7 @@ export default function Dashboard() {
       </div>
 
       {/* Transaction Table */}
-      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden">
+      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden mb-6">
         <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h2 className="text-lg font-bold">Department Forecast Details</h2>
@@ -1233,6 +1239,65 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Sales Settings Modal */}
+      {isSalesFormOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-slate-200/50 dark:border-slate-700/50"
+          >
+            <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Target className="w-5 h-5 text-orange-500" />
+                Sales Settings
+              </h2>
+              <button onClick={() => setIsSalesFormOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6 max-h-[70vh] overflow-y-auto">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Total Sales Forecast (FY 26-27)</label>
+                  <input
+                    type="number"
+                    value={sales.forecast}
+                    onChange={(e) => setSales({ ...sales, forecast: Number(e.target.value) })}
+                    className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                  />
+                </div>
+                
+                <div>
+                  <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300 mb-4 border-b border-slate-200/50 dark:border-slate-700/50 pb-2">Monthly Actual Sales (FY 25-26)</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    {['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'].map(month => (
+                      <div key={month}>
+                        <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">{month}</label>
+                        <input
+                          type="number"
+                          value={monthlySales[month]}
+                          onChange={(e) => setMonthlySales({ ...monthlySales, [month]: Number(e.target.value) })}
+                          className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200/50 dark:border-slate-700/50 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/50">
+              <button 
+                onClick={() => setIsSalesFormOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300/50 dark:border-slate-700/50 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
 
       {/* Add/Edit Modal */}
       {isFormOpen && (

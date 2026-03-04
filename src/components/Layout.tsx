@@ -11,6 +11,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState(companyName);
 
+  useEffect(() => {
+    setTempName(companyName);
+  }, [companyName]);
+
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
