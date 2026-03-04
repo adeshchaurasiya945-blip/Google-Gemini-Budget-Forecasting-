@@ -603,113 +603,170 @@ export default function Dashboard() {
         </motion.div>
       )}
 
-      {/* Filters */}
-      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm flex flex-wrap gap-4 items-end">
-        <div>
-          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Department</label>
-          <select 
-            value={selectedDept}
-            onChange={(e) => {
-              setSelectedDept(e.target.value);
-              setSelectedHead("All");
-              setSelectedSubHead("All");
-              setCurrentPage(1);
-            }}
-            className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
-          >
-            {dynamicDepartments.map(d => <option key={d} value={d}>{d}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Head</label>
-          <select 
-            value={selectedHead}
-            onChange={(e) => {
-              setSelectedHead(e.target.value);
-              setSelectedSubHead("All");
-              setCurrentPage(1);
-            }}
-            className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
-          >
-            <option value="All">All</option>
-            {Array.from(new Set(transactions.filter(t => selectedDept === "All" || t.department === selectedDept).map(t => t.head))).map(h => <option key={h} value={h}>{h}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Sub Head</label>
-          <select 
-            value={selectedSubHead}
-            onChange={(e) => {
-              setSelectedSubHead(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
-          >
-            <option value="All">All</option>
-            {Array.from(new Set(transactions.filter(t => (selectedDept === "All" || t.department === selectedDept) && (selectedHead === "All" || t.head === selectedHead)).map(t => t.subHead))).map(sh => <option key={sh} value={sh}>{sh}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Date Range</label>
-          <select 
-            value={datePreset}
-            onChange={(e) => handlePresetChange(e.target.value)}
-            className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
-          >
-            <option value="All Time">All Time</option>
-            <option value="This Month">This Month</option>
-            <option value="Last Quarter">Last Quarter</option>
-            <option value="Year to Date">Year to Date</option>
-            <option value="Custom">Custom Range</option>
-          </select>
-        </div>
-        {datePreset === "Custom" && (
-          <>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Start Date</label>
-              <input 
-                type="date" 
-                value={dateRange.start}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left Sidebar for Filters */}
+        <div className="w-full lg:w-64 flex-shrink-0">
+          <div className="bg-slate-900 dark:bg-slate-950 p-5 rounded-2xl shadow-lg flex flex-col gap-5 sticky top-24">
+            <h3 className="text-white font-bold text-lg mb-2 flex items-center gap-2">
+              <Filter className="w-5 h-5 text-orange-500" />
+              Filters
+            </h3>
+            
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-400">Department</label>
+              <select 
+                value={selectedDept}
                 onChange={(e) => {
-                  setDateRange(prev => ({ ...prev, start: e.target.value }));
+                  setSelectedDept(e.target.value);
+                  setSelectedHead("All");
+                  setSelectedSubHead("All");
                   setCurrentPage(1);
                 }}
-                className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
-              />
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+              >
+                {dynamicDepartments.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">End Date</label>
-              <input 
-                type="date" 
-                value={dateRange.end}
+            
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-400">Head</label>
+              <select 
+                value={selectedHead}
                 onChange={(e) => {
-                  setDateRange(prev => ({ ...prev, end: e.target.value }));
+                  setSelectedHead(e.target.value);
+                  setSelectedSubHead("All");
                   setCurrentPage(1);
                 }}
-                className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
-              />
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+              >
+                <option value="All">All</option>
+                {Array.from(new Set(transactions.filter(t => selectedDept === "All" || t.department === selectedDept).map(t => t.head))).map(h => <option key={h} value={h}>{h}</option>)}
+              </select>
             </div>
-          </>
-        )}
-        <div className="ml-auto flex gap-2">
-          <button 
-            onClick={() => setIsSalesFormOpen(true)}
-            className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-white px-4 py-2.5 rounded-lg font-medium transition-colors"
-          >
-            <Target className="w-4 h-4" /> Sales Settings
-          </button>
-          <button 
-            onClick={() => {
-              setEditingId(null);
-              setFormRows([defaultRow()]);
-              setIsFormOpen(true);
-            }}
-            className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors"
-          >
-            <Plus className="w-4 h-4" /> Add Transaction
-          </button>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-400">Sub Head</label>
+              <select 
+                value={selectedSubHead}
+                onChange={(e) => {
+                  setSelectedSubHead(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+              >
+                <option value="All">All</option>
+                {Array.from(new Set(transactions.filter(t => (selectedDept === "All" || t.department === selectedDept) && (selectedHead === "All" || t.head === selectedHead)).map(t => t.subHead))).map(sh => <option key={sh} value={sh}>{sh}</option>)}
+              </select>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-slate-400">Date Range</label>
+              <select 
+                value={datePreset}
+                onChange={(e) => handlePresetChange(e.target.value)}
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+              >
+                <option value="All Time">All Time</option>
+                <option value="This Month">This Month</option>
+                <option value="Last Quarter">Last Quarter</option>
+                <option value="Year to Date">Year to Date</option>
+                <option value="Custom">Custom Range</option>
+              </select>
+            </div>
+
+            {datePreset === "Custom" && (
+              <>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-400">Start Date</label>
+                  <input 
+                    type="date" 
+                    value={dateRange.start}
+                    onChange={(e) => {
+                      setDateRange(prev => ({ ...prev, start: e.target.value }));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-400">End Date</label>
+                  <input 
+                    type="date" 
+                    value={dateRange.end}
+                    onChange={(e) => {
+                      setDateRange(prev => ({ ...prev, end: e.target.value }));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                  />
+                </div>
+              </>
+            )}
+
+            <div className="mt-4 flex flex-col gap-3">
+              <button 
+                onClick={() => setIsSalesFormOpen(true)}
+                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors w-full border border-slate-700"
+              >
+                <Target className="w-4 h-4" /> Sales Settings
+              </button>
+              <button 
+                onClick={() => {
+                  setEditingId(null);
+                  setFormRows([defaultRow()]);
+                  setIsFormOpen(true);
+                }}
+                className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors w-full"
+              >
+                <Plus className="w-4 h-4" /> Add Transaction
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* Main Content Area */}
+        <div className="flex-1 space-y-6">
+
+          {/* KPI Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+            >
+              <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Variance</h3>
+                  <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-500" />
+                  </div>
+                </div>
+                <p className={`text-xl font-bold ${variance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                  {variance > 0 ? '+' : ''}{formatCurrency(variance)}
+                </p>
+              </div>
+            </motion.div>
+
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.4 }}
+              className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+            >
+              <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast vs Sales</h3>
+                  <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
+                    <PieChartIcon className="w-4 h-4 text-indigo-500" />
+                  </div>
+                </div>
+                <p className="text-xl font-bold text-slate-900 dark:text-white">{forecastExpenseToSalesRatio.toFixed(1)}%</p>
+              </div>
+            </motion.div>
+          </div>
 
       {/* SALES & EXPENSE FORECAST ANALYSIS */}
       <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
@@ -812,85 +869,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
-        >
-          <div className="absolute top-0 left-0 w-1 h-full bg-blue-500" />
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Actual (25-26)</h3>
-              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <DollarSign className="w-4 h-4 text-blue-500" />
-              </div>
-            </div>
-            <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(totals.actual)}</p>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
-        >
-          <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500" />
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Forecast (26-27)</h3>
-              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <TrendingUp className="w-4 h-4 text-emerald-500" />
-              </div>
-            </div>
-            <p className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(totals.forecast)}</p>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
-        >
-          <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Variance</h3>
-              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <AlertCircle className="w-4 h-4 text-red-500" />
-              </div>
-            </div>
-            <p className={`text-xl font-bold ${variance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-              {variance > 0 ? '+' : ''}{formatCurrency(variance)}
-            </p>
-          </div>
-        </motion.div>
-
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
-        >
-          <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast vs Sales</h3>
-              <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                <PieChartIcon className="w-4 h-4 text-indigo-500" />
-              </div>
-            </div>
-            <p className="text-xl font-bold text-slate-900 dark:text-white">{forecastExpenseToSalesRatio.toFixed(1)}%</p>
-          </div>
-        </motion.div>
-      </div>
-
       {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-lg font-bold">
@@ -1045,6 +1025,9 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+      
+      </div> {/* End Main Content Area */}
+      </div> {/* End Flex Container */}
 
       {/* Department Analysis Table */}
       <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden mb-6">
