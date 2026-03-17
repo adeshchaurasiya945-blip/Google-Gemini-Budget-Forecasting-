@@ -49,7 +49,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     fetchTransactions();
   }, []);
 
+  useEffect(() => {
+    if (!isLoading) {
+      localStorage.setItem('transactions', JSON.stringify(transactions));
+    }
+  }, [transactions, isLoading]);
+
   const fetchTransactions = async () => {
+    const stored = localStorage.getItem('transactions');
+    if (stored) {
+      try {
+        setTransactions(JSON.parse(stored));
+        setIsLoading(false);
+        return;
+      } catch (e) {
+        console.error('Failed to parse stored transactions', e);
+      }
+    }
     // Force use of CSV data as requested by user
     const parsedData = parseCsvData(rawCsvData);
     setTransactions(parsedData);

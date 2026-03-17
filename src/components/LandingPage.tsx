@@ -1,10 +1,87 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { TrendingUp, PieChart, Target, ArrowRight } from 'lucide-react';
+import { TrendingUp, PieChart, Target, ArrowRight, Upload, Edit2 } from 'lucide-react';
+import { useAppContext } from '../context/AppContext';
 
 export default function LandingPage({ onStart }: { onStart: () => void }) {
+  const { companyName, setCompanyName, logo, setLogo } = useAppContext();
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [tempName, setTempName] = useState(companyName);
+
+  useEffect(() => {
+    setTempName(companyName);
+  }, [companyName]);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogo(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleNameSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (tempName.trim()) {
+      setCompanyName(tempName.trim());
+      setIsEditingName(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col items-center justify-center relative overflow-hidden">
+      {/* Header with Logo and Company Name */}
+      <div className="absolute top-0 left-0 w-full p-6 flex items-center justify-between z-20">
+        <div className="flex items-center gap-4">
+          <div className="relative">
+            <div className="w-12 h-12 rounded-xl bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-800/50">
+              {logo ? (
+                <img src={logo} alt="Company Logo" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-orange-400 font-bold text-2xl">
+                  {companyName.charAt(0).toUpperCase()}
+                </span>
+              )}
+            </div>
+            <label className="absolute -bottom-2 -right-2 p-1.5 bg-slate-800 rounded-full shadow-lg border border-slate-700 cursor-pointer hover:bg-slate-700 transition-colors" title="Upload Logo">
+              <Upload className="w-3 h-3 text-slate-400" />
+              <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+            </label>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            {isEditingName ? (
+              <form onSubmit={handleNameSubmit} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={tempName}
+                  onChange={(e) => setTempName(e.target.value)}
+                  className="bg-slate-800/50 border border-orange-800/50 rounded px-2 py-1 text-xl font-bold text-white focus:outline-none focus:ring-2 focus:ring-orange-500 w-48"
+                  autoFocus
+                  onBlur={handleNameSubmit}
+                />
+              </form>
+            ) : (
+              <div className="flex items-center gap-2">
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-orange-400 to-red-500 bg-clip-text text-transparent">
+                  {companyName}
+                </h1>
+                <button
+                  onClick={() => setIsEditingName(true)}
+                  className="p-1.5 rounded-full hover:bg-slate-800/50 transition-colors"
+                  title="Edit Company Name"
+                >
+                  <Edit2 className="w-4 h-4 text-slate-400" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* Background elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-orange-600/20 blur-[120px]" />

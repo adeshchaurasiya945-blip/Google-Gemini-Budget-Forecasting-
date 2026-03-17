@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { formatCurrency } from '../utils/formatters';
 import { motion } from 'motion/react';
@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import * as htmlToImage from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare, Camera, PieChart as PieChartIcon } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare, Camera, PieChart as PieChartIcon, Info, HelpCircle } from 'lucide-react';
 
 const DEPARTMENTS = [
   "All",
@@ -16,6 +16,52 @@ const DEPARTMENTS = [
   "Documents", "Accounts", "Sales", "Admin", 
   "HR", "MDO"
 ];
+
+const FormulaPopup = ({ title, formula, explanation, example }: { title: string, formula: string, explanation: string, example?: string }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const popupRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (popupRef.current && !popupRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  return (
+    <div className="relative inline-block ml-2" ref={popupRef}>
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setIsOpen(!isOpen); }}
+        className="w-5 h-5 flex items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[9px] font-bold text-slate-500 dark:text-slate-400 hover:bg-orange-100 hover:text-orange-600 dark:hover:bg-orange-900/50 dark:hover:text-orange-400 transition-colors z-10"
+        title="Show Formula & Explanation"
+      >
+        F=
+      </button>
+      
+      {isOpen && (
+        <div className="absolute right-0 sm:left-0 sm:right-auto top-full mt-2 w-64 p-3 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-slate-200 dark:border-slate-700 z-50 animate-in fade-in slide-in-from-top-2">
+          <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-1">{title}</h4>
+          <div className="bg-slate-50 dark:bg-slate-900 p-2 rounded border border-slate-100 dark:border-slate-700 mb-2">
+            <code className="text-[10px] text-orange-600 dark:text-orange-400 font-mono break-words">{formula}</code>
+          </div>
+          <p className="text-[10px] text-slate-600 dark:text-slate-400 leading-relaxed">
+            {explanation}
+          </p>
+          {example && (
+            <div className="mt-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+              <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Example</span>
+              <p className="text-[10px] text-slate-700 dark:text-slate-300 font-mono mt-1">{example}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function Dashboard() {
   const { transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory } = useAppContext();
@@ -30,21 +76,48 @@ export default function Dashboard() {
   const [barChartMetric, setBarChartMetric] = useState<'all' | 'actual_vs_forecast'>('all');
   const [pieChartMetric, setPieChartMetric] = useState<'actual' | 'forecast'>('forecast');
   
-  const [forecastAdjustments, setForecastAdjustments] = useState<Record<string, number>>({});
+  const [forecastAdjustments, setForecastAdjustments] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('forecastAdjustments');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [manualForecasts, setManualForecasts] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('manualForecasts');
+    return saved ? JSON.parse(saved) : {};
+  });
   const [varianceSearchQuery, setVarianceSearchQuery] = useState("");
   const [budgetComparisonMetric, setBudgetComparisonMetric] = useState('actual');
   const [budgetComparisonView, setBudgetComparisonView] = useState('department'); // 'department' or 'month'
   
-  const [sales, setSales] = useState({
-    forecast: 115000000
+  const [sales, setSales] = useState(() => {
+    const saved = localStorage.getItem('sales');
+    return saved ? JSON.parse(saved) : { forecast: 115000000 };
   });
   
-  const [monthlySales, setMonthlySales] = useState<Record<string, number>>({
-    'Apr': 8000000, 'May': 8200000, 'Jun': 8400000, 'Jul': 8600000, 
-    'Aug': 8800000, 'Sep': 9000000, 'Oct': 9200000, 'Nov': 9400000, 
-    'Dec': 9600000, 'Jan': 8000000, 'Feb': 8500000, 'Mar': 9000000
+  const [monthlySales, setMonthlySales] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('monthlySales');
+    return saved ? JSON.parse(saved) : {
+      'Apr': 8000000, 'May': 8200000, 'Jun': 8400000, 'Jul': 8600000, 
+      'Aug': 8800000, 'Sep': 9000000, 'Oct': 9200000, 'Nov': 9400000, 
+      'Dec': 9600000, 'Jan': 8000000, 'Feb': 8500000, 'Mar': 9000000
+    };
   });
   const [isSalesFormOpen, setIsSalesFormOpen] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem('forecastAdjustments', JSON.stringify(forecastAdjustments));
+  }, [forecastAdjustments]);
+
+  useEffect(() => {
+    localStorage.setItem('manualForecasts', JSON.stringify(manualForecasts));
+  }, [manualForecasts]);
+
+  useEffect(() => {
+    localStorage.setItem('sales', JSON.stringify(sales));
+  }, [sales]);
+
+  useEffect(() => {
+    localStorage.setItem('monthlySales', JSON.stringify(monthlySales));
+  }, [monthlySales]);
   
   const totalActualSales = useMemo(() => Object.values(monthlySales).reduce((a: number, b: number) => a + b, 0), [monthlySales]);
 
@@ -167,23 +240,57 @@ export default function Dashboard() {
     });
   }, [filteredTransactions, searchQuery]);
 
-  // Aggregations
-  const totals = useMemo(() => {
+  // Dynamic labels based on filter level
+  const getLevelLabel = () => {
+    if (selectedSubHead !== "All") return `in ${selectedSubHead}`;
+    if (selectedHead !== "All") return `in ${selectedHead}`;
+    if (selectedDept !== "All") return `in ${selectedDept}`;
+    return 'by Department';
+  };
+
+  const getColumnLabel = () => {
+    if (selectedHead !== "All") return "Sub Head";
+    if (selectedDept !== "All") return "Head";
+    return "Department";
+  };
+
+  // Chart Data: Top Expenses by current filter level
+  const chartData = useMemo(() => {
     let groupBy: 'department' | 'head' | 'subHead' = 'department';
     if (selectedHead !== "All") groupBy = 'subHead';
     else if (selectedDept !== "All") groupBy = 'head';
 
-    return filteredTransactions.reduce((acc, curr) => {
+    const grouped = filteredTransactions.reduce((acc, curr) => {
       const key = curr[groupBy];
+      if (!acc[key]) acc[key] = { actual: 0, forecast: 0, originalForecast: 0 };
+      acc[key].actual += curr.actual;
+      acc[key].originalForecast += curr.forecast;
+      
       const adj = forecastAdjustments[key] || 0;
-      const adjustedForecast = curr.forecast * (1 + adj / 100);
+      acc[key].forecast += curr.forecast * (1 + adj / 100);
+      return acc;
+    }, {} as Record<string, { actual: number, forecast: number, originalForecast: number }>);
+    
+    return Object.entries(grouped)
+      .map(([name, values]: [string, any]) => {
+        const finalForecast = manualForecasts[name] !== undefined ? manualForecasts[name] : values.forecast;
+        return { 
+          name, 
+          actual: values.actual, 
+          forecast: finalForecast,
+          originalForecast: values.originalForecast
+        };
+      })
+      .sort((a, b) => b.actual - a.actual);
+  }, [filteredTransactions, selectedDept, selectedHead, forecastAdjustments, manualForecasts]);
 
-      return {
-        actual: acc.actual + curr.actual,
-        forecast: acc.forecast + adjustedForecast
-      };
-    }, { actual: 0, forecast: 0 });
-  }, [filteredTransactions, selectedDept, selectedHead, forecastAdjustments]);
+  // Aggregations
+  const totals = useMemo(() => {
+    return chartData.reduce((acc, curr) => ({
+      actual: acc.actual + curr.actual,
+      forecast: acc.forecast + curr.forecast
+    }), { actual: 0, forecast: 0 });
+  }, [chartData]);
 
   const variance = totals.forecast - totals.actual;
   const variancePercent = totals.actual > 0 ? (variance / totals.actual) * 100 : 0;
@@ -209,47 +316,6 @@ export default function Dashboard() {
 
   const fixedCostPercent = totals.actual > 0 ? (fixedCost / totals.actual) * 100 : 0;
   const variableCostPercent = totals.actual > 0 ? (variableCost / totals.actual) * 100 : 0;
-
-  // Dynamic labels based on filter level
-  const getLevelLabel = () => {
-    if (selectedSubHead !== "All") return `in ${selectedSubHead}`;
-    if (selectedHead !== "All") return `in ${selectedHead}`;
-    if (selectedDept !== "All") return `in ${selectedDept}`;
-    return 'by Department';
-  };
-
-  const getColumnLabel = () => {
-    if (selectedHead !== "All") return "Sub Head";
-    if (selectedDept !== "All") return "Head";
-    return "Department";
-  };
-
-  // Chart Data: Top Expenses by current filter level
-  const chartData = useMemo(() => {
-    let groupBy: 'department' | 'head' | 'subHead' = 'department';
-    if (selectedHead !== "All") groupBy = 'subHead';
-    else if (selectedDept !== "All") groupBy = 'head';
-
-    const totals = filteredTransactions.reduce((acc, curr) => {
-      const key = curr[groupBy];
-      if (!acc[key]) acc[key] = { actual: 0, forecast: 0, originalForecast: 0 };
-      acc[key].actual += curr.actual;
-      acc[key].originalForecast += curr.forecast;
-      
-      const adj = forecastAdjustments[key] || 0;
-      acc[key].forecast += curr.forecast * (1 + adj / 100);
-      return acc;
-    }, {} as Record<string, { actual: number, forecast: number, originalForecast: number }>);
-    
-    return Object.entries(totals)
-      .map(([name, values]: [string, any]) => ({ 
-        name, 
-        actual: values.actual, 
-        forecast: values.forecast,
-        originalForecast: values.originalForecast
-      }))
-      .sort((a, b) => b.actual - a.actual);
-  }, [filteredTransactions, selectedDept, selectedHead, forecastAdjustments]);
 
   const monthWiseData = useMemo(() => {
     const months = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
@@ -279,27 +345,11 @@ export default function Dashboard() {
 
   // Pie Chart Data: Distribution of Forecast by current filter level
   const pieChartData = useMemo(() => {
-    let groupBy: 'department' | 'head' | 'subHead' = 'department';
-    if (selectedHead !== "All") groupBy = 'subHead';
-    else if (selectedDept !== "All") groupBy = 'head';
-
-    const totals = filteredTransactions.reduce((acc, curr) => {
-      const key = curr[groupBy];
-      if (!acc[key]) acc[key] = 0;
-      
-      let val = curr[pieChartMetric];
-      if (pieChartMetric === 'forecast') {
-        const adj = forecastAdjustments[key] || 0;
-        val = val * (1 + adj / 100);
-      }
-      acc[key] += val;
-      return acc;
-    }, {} as Record<string, number>);
-    
-    return Object.entries(totals)
-      .map(([name, value]) => ({ name, value: Number(value) }))
+    return chartData
+      .map(d => ({ name: d.name, value: pieChartMetric === 'actual' ? d.actual : d.forecast }))
+      .filter(d => d.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [filteredTransactions, selectedDept, selectedHead, pieChartMetric, forecastAdjustments]);
+  }, [chartData, pieChartMetric]);
 
   const headShareData = useMemo(() => {
     const headTotals = filteredTransactions.reduce((acc, curr) => {
@@ -315,13 +365,13 @@ export default function Dashboard() {
       return acc;
     }, {} as Record<string, number>);
     
-    const total = Object.values(headTotals).reduce((sum, val) => sum + val, 0);
+    const total = (Object.values(headTotals) as number[]).reduce((sum: number, val: number) => sum + val, 0);
     
     return Object.entries(headTotals)
       .map(([name, value]) => ({ 
         name, 
         value: Number(value),
-        percent: total > 0 ? (Number(value) / total) * 100 : 0
+        percent: (total as number) > 0 ? (Number(value) / (total as number)) * 100 : 0
       }))
       .sort((a, b) => b.value - a.value);
   }, [filteredTransactions, pieChartMetric, forecastAdjustments]);
@@ -369,17 +419,21 @@ export default function Dashboard() {
   }, [chartData, varianceSearchQuery]);
 
   const exportVarianceToCSV = () => {
-    const headers = [getColumnLabel(), "Actual (25-26)", "Forecast (26-27)", "Variance", "Variance %", "Status"];
+    const headers = [getColumnLabel(), "Actual (25-26)", "Adj %", "Forecast (26-27)", "Variances", "Variances %", "Status"];
     const csvData = filteredChartData.map(row => {
       const variance = row.forecast - row.actual;
       const variancePercent = row.actual > 0 ? (variance / row.actual) * 100 : 0;
       const status = variance > 0 ? 'Optimization Required' : 'Optimal Efficiency';
+      const effectiveAdj = manualForecasts[row.name] !== undefined 
+        ? (row.originalForecast > 0 ? ((manualForecasts[row.name] - row.originalForecast) / row.originalForecast) * 100 : 0)
+        : (forecastAdjustments[row.name] || 0);
       return [
         row.name,
         row.actual,
+        effectiveAdj.toFixed(0) + '%',
         row.forecast,
         variance,
-        variancePercent.toFixed(2) + '%',
+        variancePercent.toFixed(0) + '%',
         status
       ];
     });
@@ -535,70 +589,153 @@ export default function Dashboard() {
         <motion.div 
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
-          className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm"
+          className="bg-white/90 dark:bg-slate-900/80 backdrop-blur-xl p-6 rounded-2xl border border-emerald-200/50 dark:border-emerald-800/30 shadow-xl mb-6"
         >
-          <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-            <AlertCircle className="w-5 h-5 text-blue-500" />
-            Dashboard Formulas & Methodology
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Forecasting</h3>
-              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
-                Forecast = (Actual_25_26 * 0.6) + (Plan_25_26 * 0.4) * (1 + Market_Volatility_Index)
-              </div>
-              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li><strong>Market Volatility Index:</strong> Currently set at +4.2% due to expected supply chain disruptions.</li>
-                <li><strong>Inflation Adjustment:</strong> A base 6% inflation rate is factored into the Plan values.</li>
-              </ul>
+          <div className="flex items-center gap-3 mb-6 border-b border-emerald-100 dark:border-emerald-900/30 pb-4">
+            <div className="p-2 bg-emerald-100 dark:bg-emerald-900/30 rounded-lg">
+              <Brain className="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
             </div>
             <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Variance Analysis</h3>
-              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
-                Variance = Forecast - Plan<br/>
-                Variance % = (Variance / Plan) * 100
-              </div>
-              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li><strong>Positive Variance:</strong> Forecast exceeds actual (Optimization Required).</li>
-                <li><strong>Negative Variance:</strong> Forecast is below actual (Optimal Efficiency).</li>
-              </ul>
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white">Financial Intelligence Guide</h2>
+              <p className="text-sm text-slate-500 dark:text-slate-400">Strategic insights and logic behind the dashboard metrics</p>
             </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Sales & Expense Growth</h3>
-              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
-                Growth % = ((Forecast - Actual) / Actual) * 100
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 font-bold">
+                <TrendingUp className="w-4 h-4" />
+                <span>Growth Dynamics</span>
               </div>
-              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li>Calculated for both Sales and Expenses to track year-over-year projected growth.</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Expense to Sales Ratio</h3>
-              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
-                Ratio % = (Total Expenses / Total Sales) * 100
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">Sales & Expense Growth</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-blue-100 dark:border-blue-900/20">
+                  Growth % = ((Forecast - Actual) / Actual) * 100
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-blue-600 dark:text-blue-400">Strategic Impact:</span> Measures the velocity of business expansion vs operational scaling. Ideal state is Sales Growth &gt; Expense Growth.
+                </p>
               </div>
-              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li>Measures operational efficiency. Lower percentage indicates higher profitability.</li>
-              </ul>
             </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Required Sales (50% Cost)</h3>
-              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
-                Req. Sales = Forecast Expenses / 0.5
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-purple-600 dark:text-purple-400 font-bold">
+                <ActivitySquare className="w-4 h-4" />
+                <span>Efficiency Ratios</span>
               </div>
-              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li>The target sales volume required to ensure expenses do not exceed 50% of revenue.</li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="font-semibold text-slate-900 dark:text-white mb-2">Department Expense Share</h3>
-              <div className="bg-slate-50/50 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-xs mb-3 border border-gray-200 dark:border-gray-700">
-                Share % = (Dept Expense / Total Company Expense) * 100
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">Expense to Sales Ratio</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-purple-100 dark:border-purple-900/20">
+                  Ratio % = (Total Expenses / Total Sales) * 100
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-purple-600 dark:text-purple-400">Strategic Impact:</span> Benchmarks operational efficiency. A declining ratio indicates positive operating leverage.
+                </p>
               </div>
-              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600 dark:text-slate-400">
-                <li>Identifies which departments consume the largest portion of the budget.</li>
-              </ul>
             </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold">
+                <Target className="w-4 h-4" />
+                <span>Target Planning</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">Required Sales (50% Floor)</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-emerald-100 dark:border-emerald-900/20">
+                  Target = Forecast Expenses / 0.50
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">Strategic Impact:</span> Defines the minimum revenue required to maintain a 50% gross margin target based on current cost structure.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-indigo-600 dark:text-indigo-400 font-bold">
+                <PieChartIcon className="w-4 h-4" />
+                <span>Allocation Analysis</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">Department Share</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-indigo-100 dark:border-indigo-900/20">
+                  Share % = (Dept Expense / Total Expense) * 100
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-indigo-600 dark:text-indigo-400">Strategic Impact:</span> Identifies where capital is being deployed. Helps in re-allocating resources to high-ROI departments.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-red-600 dark:text-red-400 font-bold">
+                <AlertCircle className="w-4 h-4" />
+                <span>Variance Tracking</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">Budget Variance</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-red-100 dark:border-red-900/20">
+                  Variance = Forecast - Actual
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-red-600 dark:text-red-400">Strategic Impact:</span> Measures fiscal discipline. Significant positive variance requires immediate review of cost drivers.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold">
+                <DollarSign className="w-4 h-4" />
+                <span>Profitability</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">EBITDA / Net Profit</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-emerald-100 dark:border-emerald-900/20">
+                  Profit = Forecasted Sales - Forecasted Expenses
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">Strategic Impact:</span> The ultimate measure of business health. Shows the projected bottom line after all operational costs are deducted from expected revenue.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-orange-600 dark:text-orange-400 font-bold">
+                <Activity className="w-4 h-4" />
+                <span>Forecast Calculation</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">How Forecasts are Derived</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-orange-100 dark:border-orange-900/20">
+                  Forecast = Actual + Manual Adjustment
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-orange-600 dark:text-orange-400">Strategic Impact:</span> Forecasts are initially based on historical actuals. Directors can manually override these in the "Variance Analysis" table below to simulate different scenarios.
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-teal-600 dark:text-teal-400 font-bold">
+                <Filter className="w-4 h-4" />
+                <span>Filter & Linkage Guide</span>
+              </div>
+              <div>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">How Filters Affect Data</h3>
+                <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-teal-100 dark:border-teal-900/20">
+                  Global Filters → KPIs & Charts
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                  <span className="font-bold text-teal-600 dark:text-teal-400">Strategic Impact:</span> Selecting a Department, Head, or Sub-Head in the left panel instantly recalculates ALL KPIs, Pie Charts, and Trend lines to reflect only that specific segment's data.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800/50">
+            <p className="text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
+              <Info className="w-4 h-4" />
+              <strong>Director's Insight:</strong> This guide helps you understand the mathematical foundation of the dashboard. Use these metrics to drive data-backed strategic discussions during board meetings.
+            </p>
           </div>
         </motion.div>
       )}
@@ -606,14 +743,31 @@ export default function Dashboard() {
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Left Sidebar for Filters */}
         <div className="w-full lg:w-64 flex-shrink-0">
-          <div className="bg-slate-900 dark:bg-slate-950 p-5 rounded-2xl shadow-lg flex flex-col gap-5 sticky top-24">
-            <h3 className="text-white font-bold text-lg mb-2 flex items-center gap-2">
-              <Filter className="w-5 h-5 text-orange-500" />
-              Filters
-            </h3>
+          <div className="bg-slate-900 dark:bg-slate-950 p-5 rounded-2xl shadow-lg flex flex-col gap-5 sticky top-4 border border-slate-800">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-white font-bold text-lg flex items-center gap-2">
+                <Filter className="w-5 h-5 text-orange-500" />
+                Control Panel
+              </h3>
+              <div className="group relative">
+                <Info className="w-4 h-4 text-slate-400 cursor-help" />
+                <div className="absolute left-full ml-2 top-0 w-56 p-3 bg-slate-800 text-white text-[10px] rounded-lg shadow-2xl opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none border border-slate-700 leading-relaxed">
+                  <p className="font-bold text-orange-400 mb-1">Executive Guidance:</p>
+                  Use these filters to isolate specific business units. All charts and KPIs will dynamically re-calculate based on your selection.
+                </div>
+              </div>
+            </div>
             
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-400">Department</label>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-tight">1. Department</label>
+                <div className="group relative">
+                  <HelpCircle className="w-3 h-3 text-slate-500 cursor-help" />
+                  <div className="absolute left-full ml-2 top-0 w-40 p-2 bg-slate-800 text-[9px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none border border-slate-700">
+                    Broadest level. Affects all high-level KPIs and allocation charts.
+                  </div>
+                </div>
+              </div>
               <select 
                 value={selectedDept}
                 onChange={(e) => {
@@ -622,14 +776,22 @@ export default function Dashboard() {
                   setSelectedSubHead("All");
                   setCurrentPage(1);
                 }}
-                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-2 focus:ring-orange-500 block w-full p-2.5 transition-all"
               >
                 {dynamicDepartments.map(d => <option key={d} value={d}>{d}</option>)}
               </select>
             </div>
             
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-400">Head</label>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-tight">2. Expense Head</label>
+                <div className="group relative">
+                  <HelpCircle className="w-3 h-3 text-slate-500 cursor-help" />
+                  <div className="absolute left-full ml-2 top-0 w-40 p-2 bg-slate-800 text-[9px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none border border-slate-700">
+                    Drill down into specific cost categories within the department.
+                  </div>
+                </div>
+              </div>
               <select 
                 value={selectedHead}
                 onChange={(e) => {
@@ -637,47 +799,63 @@ export default function Dashboard() {
                   setSelectedSubHead("All");
                   setCurrentPage(1);
                 }}
-                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-2 focus:ring-blue-500 block w-full p-2.5 transition-all"
               >
-                <option value="All">All</option>
+                <option value="All">All Categories</option>
                 {Array.from(new Set(transactions.filter(t => selectedDept === "All" || t.department === selectedDept).map(t => t.head))).map(h => <option key={h} value={h}>{h}</option>)}
               </select>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-400">Sub Head</label>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-tight">3. Sub-Head</label>
+                <div className="group relative">
+                  <HelpCircle className="w-3 h-3 text-slate-500 cursor-help" />
+                  <div className="absolute left-full ml-2 top-0 w-40 p-2 bg-slate-800 text-[9px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none border border-slate-700">
+                    Granular analysis. Best for identifying specific line-item variances.
+                  </div>
+                </div>
+              </div>
               <select 
                 value={selectedSubHead}
                 onChange={(e) => {
                   setSelectedSubHead(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-2 focus:ring-emerald-500 block w-full p-2.5 transition-all"
               >
-                <option value="All">All</option>
+                <option value="All">All Line Items</option>
                 {Array.from(new Set(transactions.filter(t => (selectedDept === "All" || t.department === selectedDept) && (selectedHead === "All" || t.head === selectedHead)).map(t => t.subHead))).map(sh => <option key={sh} value={sh}>{sh}</option>)}
               </select>
             </div>
 
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-medium text-slate-400">Date Range</label>
+            <div className="flex flex-col gap-1.5">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-400 uppercase tracking-tight">4. Time Period</label>
+                <div className="group relative">
+                  <HelpCircle className="w-3 h-3 text-slate-500 cursor-help" />
+                  <div className="absolute left-full ml-2 top-0 w-40 p-2 bg-slate-800 text-[9px] rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none border border-slate-700">
+                    Analyze trends over specific durations.
+                  </div>
+                </div>
+              </div>
               <select 
                 value={datePreset}
                 onChange={(e) => handlePresetChange(e.target.value)}
-                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-2 focus:ring-purple-500 block w-full p-2.5 transition-all"
               >
-                <option value="All Time">All Time</option>
-                <option value="This Month">This Month</option>
-                <option value="Last Quarter">Last Quarter</option>
-                <option value="Year to Date">Year to Date</option>
+                <option value="All Time">Full Fiscal Year</option>
+                <option value="This Month">Current Month</option>
+                <option value="Last Quarter">Previous Quarter</option>
+                <option value="Year to Date">Year to Date (YTD)</option>
                 <option value="Custom">Custom Range</option>
               </select>
             </div>
 
             {datePreset === "Custom" && (
-              <>
+              <div className="space-y-3 animate-in fade-in slide-in-from-top-2 duration-300">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-400">Start Date</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase">Start Date</label>
                   <input 
                     type="date" 
                     value={dateRange.start}
@@ -685,11 +863,11 @@ export default function Dashboard() {
                       setDateRange(prev => ({ ...prev, start: e.target.value }));
                       setCurrentPage(1);
                     }}
-                    className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                    className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-2 focus:ring-orange-500 block w-full p-2.5"
                   />
                 </div>
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-400">End Date</label>
+                  <label className="text-[10px] font-medium text-slate-500 uppercase">End Date</label>
                   <input 
                     type="date" 
                     value={dateRange.end}
@@ -697,18 +875,18 @@ export default function Dashboard() {
                       setDateRange(prev => ({ ...prev, end: e.target.value }));
                       setCurrentPage(1);
                     }}
-                    className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                    className="bg-slate-800 border-none text-white text-sm rounded-lg focus:ring-2 focus:ring-orange-500 block w-full p-2.5"
                   />
                 </div>
-              </>
+              </div>
             )}
 
-            <div className="mt-4 flex flex-col gap-3">
+            <div className="mt-6 pt-6 border-t border-slate-800 flex flex-col gap-3">
               <button 
                 onClick={() => setIsSalesFormOpen(true)}
-                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors w-full border border-slate-700"
+                className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all w-full border border-slate-700 shadow-lg hover:shadow-orange-500/10"
               >
-                <Target className="w-4 h-4" /> Sales Settings
+                <Target className="w-4 h-4 text-orange-500" /> Strategic Settings
               </button>
               <button 
                 onClick={() => {
@@ -716,7 +894,7 @@ export default function Dashboard() {
                   setFormRows([defaultRow()]);
                   setIsFormOpen(true);
                 }}
-                className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-2.5 rounded-lg font-medium transition-colors w-full"
+                className="flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all w-full shadow-lg hover:shadow-orange-600/20"
               >
                 <Plus className="w-4 h-4" /> Add Transaction
               </button>
@@ -726,6 +904,134 @@ export default function Dashboard() {
 
         {/* Main Content Area */}
         <div className="flex-1 space-y-6">
+
+          {/* SALES & EXPENSE FORECAST ANALYSIS */}
+          <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+            <div className="flex items-center gap-2 mb-6">
+              <Activity className="w-5 h-5 text-blue-500" />
+              <h2 className="text-lg font-bold">Sales & Expense Forecast Analysis</h2>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              {/* Sales Growth */}
+              <div className="p-5 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30">
+                <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4" /> Sales Growth
+                  <FormulaPopup 
+                    title="Sales Growth" 
+                    formula="((Forecast FY26-27 - Current FY25-26) / Current FY25-26) * 100" 
+                    explanation="Measures the percentage increase or decrease in projected sales for the upcoming financial year compared to the current year's actual sales." 
+                    example={`(($${formatCurrency(sales.forecast)} - $${formatCurrency(totalActualSales)}) / $${formatCurrency(totalActualSales)}) * 100 = ${totalActualSales > 0 ? (((sales.forecast - totalActualSales) / totalActualSales) * 100).toFixed(0) : 0}%`}
+                  />
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current FY25-26</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(totalActualSales)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast FY26-27</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(sales.forecast)}</span>
+                  </div>
+                  <div className="pt-3 border-t border-blue-200 dark:border-blue-800/50 flex justify-between items-center">
+                    <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Growth</span>
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${sales.forecast >= totalActualSales ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                      {sales.forecast >= totalActualSales ? '+' : ''}{totalActualSales > 0 ? (((sales.forecast - totalActualSales) / totalActualSales) * 100).toFixed(0) : 0}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expense Growth */}
+              <div className="p-5 rounded-xl bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800/30">
+                <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-4 flex items-center gap-2">
+                  <TrendingDown className="w-4 h-4" /> Expense Growth
+                  <FormulaPopup 
+                    title="Expense Growth" 
+                    formula="((Forecast FY26-27 - Current FY25-26) / Current FY25-26) * 100" 
+                    explanation="Measures the percentage increase or decrease in projected expenses for the upcoming financial year compared to the current year's actual expenses." 
+                    example={`(($${formatCurrency(totals.forecast)} - $${formatCurrency(totals.actual)}) / $${formatCurrency(totals.actual)}) * 100 = ${totals.actual > 0 ? (((totals.forecast - totals.actual) / totals.actual) * 100).toFixed(0) : 0}%`}
+                  />
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current FY25-26</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(totals.actual)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast FY26-27</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(totals.forecast)}</span>
+                  </div>
+                  <div className="pt-3 border-t border-orange-200 dark:border-orange-800/50 flex justify-between items-center">
+                    <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Growth</span>
+                    <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${totals.forecast <= totals.actual ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
+                      {totals.forecast >= totals.actual ? '+' : ''}{totals.actual > 0 ? (((totals.forecast - totals.actual) / totals.actual) * 100).toFixed(0) : 0}%
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Expense to Sales Ratio */}
+              <div className="p-5 rounded-xl bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/30">
+                <h4 className="text-sm font-semibold text-purple-800 dark:text-purple-300 mb-4 flex items-center gap-2">
+                  <ActivitySquare className="w-4 h-4" /> Expense to Sales Ratio
+                  <FormulaPopup 
+                    title="Expense to Sales Ratio" 
+                    formula="(Total Expenses / Total Sales) * 100" 
+                    explanation="Indicates what percentage of your sales revenue is consumed by expenses. A lower ratio means higher profitability." 
+                    example={`($${formatCurrency(totals.forecast)} / $${formatCurrency(sales.forecast)}) * 100 = ${sales.forecast > 0 ? ((totals.forecast / sales.forecast) * 100).toFixed(0) : 0}%`}
+                  />
+                </h4>
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current Ratio</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{totalActualSales > 0 ? ((totals.actual / totalActualSales) * 100).toFixed(0) : 0}%</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast Ratio</span>
+                    <span className="font-semibold text-slate-900 dark:text-white">{sales.forecast > 0 ? ((totals.forecast / sales.forecast) * 100).toFixed(0) : 0}%</span>
+                  </div>
+                  <div className="pt-3 border-t border-purple-200 dark:border-purple-800/50 flex justify-between items-center">
+                    <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Req. Sales (50% Cost)</span>
+                    <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
+                      {formatCurrency(totals.forecast / 0.5)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-8">
+              <h3 className="text-md font-bold mb-4 text-slate-900 dark:text-white flex items-center">
+                Sales vs Expenses Trend
+                <FormulaPopup 
+                  title="Sales vs Expenses Trend" 
+                  formula="Monthly Actual Sales vs Monthly Actual Expenses" 
+                  explanation="A month-by-month comparison of actual sales revenue against actual expenses incurred, helping identify seasonal trends and cash flow patterns." 
+                  example={`Apr: Sales $${formatCurrency(monthlySales['Apr'] || 0)} vs Exp $${formatCurrency(monthWiseData.find(d => d.name === 'Apr')?.actual || 0)}`}
+                />
+              </h3>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={monthWiseData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                    <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="left" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`} tickLine={false} axisLine={false} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`} tickLine={false} axisLine={false} />
+                    <RechartsTooltip 
+                      itemStyle={{ color: '#fff' }}
+                      cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                      contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
+                      formatter={(value: number) => formatCurrency(value)}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar yAxisId="left" dataKey={(d) => monthlySales[d.name] || 0} name="Actual Sales" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="actual" name="Actual Expenses" fill="#F97316" radius={[4, 4, 0, 0]} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
 
           {/* KPI Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -738,7 +1044,15 @@ export default function Dashboard() {
               <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Total Variance</h3>
+                  <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center">
+                    Total Variance
+                    <FormulaPopup 
+                      title="Total Variance" 
+                      formula="Total Forecast (26-27) - Total Actual (25-26)" 
+                      explanation="The absolute monetary difference between the forecasted expenses for the next financial year and the actual expenses of the current year." 
+                      example={`$${formatCurrency(totals.forecast)} - $${formatCurrency(totals.actual)} = $${formatCurrency(variance)}`}
+                    />
+                  </h3>
                   <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
                     <AlertCircle className="w-4 h-4 text-red-500" />
                   </div>
@@ -758,271 +1072,202 @@ export default function Dashboard() {
               <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast vs Sales</h3>
+                  <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center">
+                    EBITDA / Net Profit
+                    <FormulaPopup 
+                      title="EBITDA / Net Profit (Forecast)" 
+                      formula="Forecasted Sales - Forecasted Total Expenses" 
+                      explanation="The projected bottom line profit or loss for the upcoming financial year based on your forecasted sales and expenses." 
+                      example={`$${formatCurrency(sales.forecast)} - $${formatCurrency(totals.forecast)} = $${formatCurrency(sales.forecast - totals.forecast)}`}
+                    />
+                  </h3>
                   <div className="p-1.5 bg-slate-50/50 dark:bg-slate-800/50 rounded-lg">
-                    <PieChartIcon className="w-4 h-4 text-indigo-500" />
+                    <DollarSign className="w-4 h-4 text-indigo-500" />
                   </div>
                 </div>
-                <p className="text-xl font-bold text-slate-900 dark:text-white">{forecastExpenseToSalesRatio.toFixed(1)}%</p>
+                <p className={`text-xl font-bold ${sales.forecast - totals.forecast >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                  {formatCurrency(sales.forecast - totals.forecast)}
+                </p>
               </div>
             </motion.div>
           </div>
 
-      {/* SALES & EXPENSE FORECAST ANALYSIS */}
-      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-        <div className="flex items-center gap-2 mb-6">
-          <Activity className="w-5 h-5 text-blue-500" />
-          <h2 className="text-lg font-bold">Sales & Expense Forecast Analysis</h2>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-          {/* Sales Growth */}
-          <div className="p-5 rounded-xl bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30">
-            <h4 className="text-sm font-semibold text-blue-800 dark:text-blue-300 mb-4 flex items-center gap-2">
-              <TrendingUp className="w-4 h-4" /> Sales Growth
-            </h4>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current FY25-26</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(totalActualSales)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast FY26-27</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(sales.forecast)}</span>
-              </div>
-              <div className="pt-3 border-t border-blue-200 dark:border-blue-800/50 flex justify-between items-center">
-                <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Growth</span>
-                <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${sales.forecast >= totalActualSales ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                  {sales.forecast >= totalActualSales ? '+' : ''}{totalActualSales > 0 ? (((sales.forecast - totalActualSales) / totalActualSales) * 100).toFixed(1) : 0}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Expense Growth */}
-          <div className="p-5 rounded-xl bg-orange-50/50 dark:bg-orange-900/10 border border-orange-100 dark:border-orange-800/30">
-            <h4 className="text-sm font-semibold text-orange-800 dark:text-orange-300 mb-4 flex items-center gap-2">
-              <TrendingDown className="w-4 h-4" /> Expense Growth
-            </h4>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current FY25-26</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(totals.actual)}</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast FY26-27</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{formatCurrency(totals.forecast)}</span>
-              </div>
-              <div className="pt-3 border-t border-orange-200 dark:border-orange-800/50 flex justify-between items-center">
-                <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Growth</span>
-                <span className={`text-sm font-bold px-2 py-0.5 rounded-full ${totals.forecast <= totals.actual ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'}`}>
-                  {totals.forecast >= totals.actual ? '+' : ''}{totals.actual > 0 ? (((totals.forecast - totals.actual) / totals.actual) * 100).toFixed(1) : 0}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Expense to Sales Ratio */}
-          <div className="p-5 rounded-xl bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/30">
-            <h4 className="text-sm font-semibold text-purple-800 dark:text-purple-300 mb-4 flex items-center gap-2">
-              <ActivitySquare className="w-4 h-4" /> Expense to Sales Ratio
-            </h4>
-            <div className="space-y-3">
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Current Ratio</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{totalActualSales > 0 ? ((totals.actual / totalActualSales) * 100).toFixed(1) : 0}%</span>
-              </div>
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Forecast Ratio</span>
-                <span className="font-semibold text-slate-900 dark:text-white">{sales.forecast > 0 ? ((totals.forecast / sales.forecast) * 100).toFixed(1) : 0}%</span>
-              </div>
-              <div className="pt-3 border-t border-purple-200 dark:border-purple-800/50 flex justify-between items-center">
-                <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Req. Sales (50% Cost)</span>
-                <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
-                  {formatCurrency(totals.forecast / 0.5)}
-                </span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <h3 className="text-md font-bold mb-4 text-slate-900 dark:text-white">Sales vs Expenses Trend</h3>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={monthWiseData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="left" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`} tickLine={false} axisLine={false} />
-                <YAxis yAxisId="right" orientation="right" stroke="#9CA3AF" fontSize={12} tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`} tickLine={false} axisLine={false} />
-                <RechartsTooltip 
-                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number) => formatCurrency(value)}
-                />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                <Bar yAxisId="left" dataKey={(d) => monthlySales[d.name] || 0} name="Actual Sales" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                <Bar yAxisId="right" dataKey="actual" name="Actual Expenses" fill="#F97316" radius={[4, 4, 0, 0]} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      </div>
-
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold">
-              Total Expenses Value & %
-            </h2>
-            <select
-              value={pieChartMetric}
-              onChange={(e) => setPieChartMetric(e.target.value as any)}
-              className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
-            >
-              <option value="actual">Actual</option>
-              <option value="forecast">Forecast</option>
-            </select>
-          </div>
-          <div className="h-80 relative">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={pieChartData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={80}
-                  outerRadius={120}
-                  paddingAngle={5}
-                  dataKey="value"
-                  stroke="none"
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  labelLine={false}
-                >
-                  {pieChartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                  ))}
-                </Pie>
-                <RechartsTooltip 
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
-                  formatter={(value: number, name: string, props: any) => {
-                    const total = pieChartData.reduce((sum, d) => sum + d.value, 0);
-                    const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                    return [`${formatCurrency(value)} (${percent}%)`, name];
-                  }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center">
-                <p className="text-xs text-slate-500 dark:text-slate-400">Total {pieChartMetric === 'actual' ? 'Actual' : 'Forecast'}</p>
-                <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(pieChartMetric === 'actual' ? totals.actual : totals.forecast)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold">
-              Budget Comparison {getLevelLabel()}
-            </h2>
-            <div className="flex gap-2">
-              <select
-                value={budgetComparisonView}
-                onChange={(e) => setBudgetComparisonView(e.target.value)}
-                className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
-              >
-                <option value="department">By Department</option>
-                <option value="month">By Month</option>
-              </select>
-              <select
-                value={budgetComparisonMetric}
-                onChange={(e) => setBudgetComparisonMetric(e.target.value)}
-                className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
-              >
-                <option value="all">All Metrics</option>
-                <option value="actual">Actual Only</option>
-                <option value="forecast">Forecast Only</option>
-              </select>
-            </div>
-          </div>
-          <div className="h-80">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={budgetComparisonData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#9CA3AF" 
-                  fontSize={12} 
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis 
-                  stroke="#9CA3AF" 
-                  fontSize={12}
-                  tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <RechartsTooltip 
-                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
-                  formatter={(value: number) => formatCurrency(value)}
-                />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                {(budgetComparisonMetric === 'all' || budgetComparisonMetric === 'actual') && (
-                  <Bar dataKey="actual" name="Actual (25-26)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
-                )}
-                {(budgetComparisonMetric === 'all' || budgetComparisonMetric === 'forecast') && (
-                  <Bar dataKey="forecast" name="Forecast (26-27)" fill="#F97316" radius={[4, 4, 0, 0]} />
-                )}
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-lg font-bold">
-              Head-wise Expenses Share
-            </h2>
-            <select
-              value={pieChartMetric}
-              onChange={(e) => setPieChartMetric(e.target.value as any)}
-              className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
-            >
-              <option value="actual">Actual</option>
-              <option value="forecast">Forecast</option>
-            </select>
-          </div>
-          <div className="h-80 overflow-y-auto pr-2">
-            <ResponsiveContainer width="100%" height={Math.max(320, headShareData.length * 40)}>
-              <BarChart layout="vertical" data={headShareData} margin={{ top: 5, right: 120, left: 100, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
-                <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} width={100} />
-                <RechartsTooltip 
-                  cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
-                  contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
-                  formatter={(value: number, name: string, props: any) => [`${formatCurrency(value)} (${props.payload.percent.toFixed(1)}%)`, 'Value']}
-                />
-                <Bar dataKey="value" fill="#3B82F6" radius={[0, 4, 4, 0]}>
-                  <LabelList 
-                    dataKey="value" 
-                    position="right" 
-                    formatter={(value: number) => {
-                      const item = headShareData.find(d => d.value === value);
-                      return `${formatCurrency(value)} (${item?.percent.toFixed(1)}%)`;
-                    }}
-                    fill="currentColor"
-                    className="text-slate-700 dark:text-slate-300 text-xs font-medium"
+          {/* Charts Moved Up */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold flex items-center">
+                  Total Expenses Value & %
+                  <FormulaPopup 
+                    title="Total Expenses Distribution" 
+                    formula="(Category Value / Total Value) * 100" 
+                    explanation="Shows the proportional distribution of expenses across different categories (Actual or Forecast). Helps identify which areas consume the largest share of the budget." 
+                    example={pieChartData.length > 0 ? `(${formatCurrency(pieChartData[0].value)} / ${formatCurrency(pieChartMetric === 'actual' ? totals.actual : totals.forecast)}) * 100 = ${((pieChartData[0].value / (pieChartMetric === 'actual' ? totals.actual : totals.forecast)) * 100).toFixed(0)}%` : undefined}
                   />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                </h2>
+                <select
+                  value={pieChartMetric}
+                  onChange={(e) => setPieChartMetric(e.target.value as any)}
+                  className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
+                >
+                  <option value="actual">Actual</option>
+                  <option value="forecast">Forecast</option>
+                </select>
+              </div>
+              <div className="h-80 relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieChartData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={80}
+                      outerRadius={120}
+                      paddingAngle={5}
+                      dataKey="value"
+                      stroke="none"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      labelLine={false}
+                    >
+                      {pieChartData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip 
+                      itemStyle={{ color: '#fff' }}
+                      contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
+                      formatter={(value: number, name: string, props: any) => {
+                        const total = pieChartData.reduce((sum, d) => sum + d.value, 0);
+                        const percent = total > 0 ? ((value / total) * 100).toFixed(0) : 0;
+                        return [`${formatCurrency(value)} (${percent}%)`, name];
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                  <div className="text-center">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Total {pieChartMetric === 'actual' ? 'Actual' : 'Forecast'}</p>
+                    <p className="text-lg font-bold text-slate-900 dark:text-white">{formatCurrency(pieChartMetric === 'actual' ? totals.actual : totals.forecast)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold flex items-center">
+                  Budget Comparison {getLevelLabel()}
+                  <FormulaPopup 
+                    title="Budget Comparison" 
+                    formula="Actual (25-26) vs Forecast (26-27)" 
+                    explanation="A side-by-side visual comparison of current actual expenses against future forecasted expenses, broken down by the selected filter level (Department, Head, or Month)." 
+                    example={budgetComparisonData.length > 0 ? `${budgetComparisonData[0].name}: Actual $${formatCurrency(budgetComparisonData[0].actual)} vs Forecast $${formatCurrency(budgetComparisonData[0].forecast)}` : undefined}
+                  />
+                </h2>
+                <div className="flex gap-2">
+                  <select
+                    value={budgetComparisonView}
+                    onChange={(e) => setBudgetComparisonView(e.target.value)}
+                    className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
+                  >
+                    <option value="department">By Department</option>
+                    <option value="month">By Month</option>
+                  </select>
+                  <select
+                    value={budgetComparisonMetric}
+                    onChange={(e) => setBudgetComparisonMetric(e.target.value)}
+                    className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
+                  >
+                    <option value="all">All Metrics</option>
+                    <option value="actual">Actual Only</option>
+                    <option value="forecast">Forecast Only</option>
+                  </select>
+                </div>
+              </div>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={budgetComparisonData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="#9CA3AF" 
+                      fontSize={12} 
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      stroke="#9CA3AF" 
+                      fontSize={12}
+                      tickFormatter={(value) => `₹${(value / 10000000).toFixed(0)}Cr`}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <RechartsTooltip 
+                      itemStyle={{ color: '#fff' }}
+                      cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                      contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff' }}
+                      formatter={(value: number) => formatCurrency(value)}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    {(budgetComparisonMetric === 'all' || budgetComparisonMetric === 'actual') && (
+                      <Bar dataKey="actual" name="Actual (25-26)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                    )}
+                    {(budgetComparisonMetric === 'all' || budgetComparisonMetric === 'forecast') && (
+                      <Bar dataKey="forecast" name="Forecast (26-27)" fill="#F97316" radius={[4, 4, 0, 0]} />
+                    )}
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
           </div>
+
+      {/* Head-wise Expenses Share moved here */}
+      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-6 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm mb-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-lg font-bold flex items-center">
+            Head-wise Expenses Share
+            <FormulaPopup 
+              title="Head-wise Expenses Share" 
+              formula="(Head Expense / Total Expense) * 100" 
+              explanation="Ranks expense heads by their total value and shows their percentage contribution to the overall expenses. Useful for identifying top cost drivers." 
+              example={headShareData.length > 0 ? `(${formatCurrency(headShareData[0].value)} / ${formatCurrency(pieChartMetric === 'actual' ? totals.actual : totals.forecast)}) * 100 = ${headShareData[0].percent.toFixed(0)}%` : undefined}
+            />
+          </h2>
+          <select
+            value={pieChartMetric}
+            onChange={(e) => setPieChartMetric(e.target.value as any)}
+            className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-xs rounded-lg focus:ring-orange-500 focus:border-orange-500 p-2"
+          >
+            <option value="actual">Actual</option>
+            <option value="forecast">Forecast</option>
+          </select>
+        </div>
+        <div className="h-80 overflow-y-auto pr-2">
+          <ResponsiveContainer width="100%" height={Math.max(320, headShareData.length * 40)}>
+            <BarChart layout="vertical" data={headShareData} margin={{ top: 5, right: 120, left: 100, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+              <XAxis type="number" hide />
+              <YAxis dataKey="name" type="category" stroke="#9CA3AF" fontSize={12} tickLine={false} axisLine={false} width={100} />
+              <RechartsTooltip 
+                itemStyle={{ color: '#fff' }}
+                cursor={{ fill: 'rgba(255, 255, 255, 0.05)' }}
+                contentStyle={{ backgroundColor: '#1F2937', border: 'none', borderRadius: '8px', color: '#fff', fontSize: '12px' }}
+                formatter={(value: number, name: string, props: any) => [`${formatCurrency(value)} (${props.payload.percent.toFixed(0)}%)`, 'Value']}
+              />
+              <Bar dataKey="value" fill="#3B82F6" radius={[0, 4, 4, 0]}>
+                <LabelList 
+                  dataKey="value" 
+                  position="right" 
+                  formatter={(value: number) => {
+                    const item = headShareData.find(d => d.value === value);
+                    return `${formatCurrency(value)} (${item?.percent.toFixed(0)}%)`;
+                  }}
+                  fill="currentColor"
+                  className="text-slate-700 dark:text-slate-300 text-xs font-medium"
+                />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </div>
       
@@ -1033,7 +1278,15 @@ export default function Dashboard() {
       <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden mb-6">
         <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-lg font-bold">Variance Analysis {getLevelLabel()}</h2>
+            <h2 className="text-lg font-bold flex items-center">
+              Variance Analysis {getLevelLabel()}
+              <FormulaPopup 
+                title="Variance Analysis" 
+                formula="Variance = Forecast - Actual | Variance % = (Variance / Actual) * 100" 
+                explanation="A detailed breakdown of expenses showing the exact monetary and percentage differences between current actuals and future forecasts. Includes manual adjustment tracking." 
+                example={filteredChartData.length > 0 ? `Variance: $${formatCurrency(filteredChartData[0].forecast)} - $${formatCurrency(filteredChartData[0].actual)} = $${formatCurrency(filteredChartData[0].forecast - filteredChartData[0].actual)}` : undefined}
+              />
+            </h2>
             <p className="text-sm text-slate-500 mt-1">Comparing Forecast vs Actual to identify optimization or investment opportunities.</p>
           </div>
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -1063,8 +1316,10 @@ export default function Dashboard() {
               <tr>
                 <th className="px-6 py-4 font-medium">{getColumnLabel()}</th>
                 <th className="px-6 py-4 font-medium text-right">Actual (25-26)</th>
+                <th className="px-6 py-4 font-medium text-right">Adj %</th>
                 <th className="px-6 py-4 font-medium text-right">Forecast (26-27)</th>
-                <th className="px-6 py-4 font-medium text-right">Variance (Fcst vs Actual)</th>
+                <th className="px-6 py-4 font-medium text-right">Variances</th>
+                <th className="px-6 py-4 font-medium text-right">Variances %</th>
                 <th className="px-6 py-4 font-medium text-center">Status</th>
               </tr>
             </thead>
@@ -1074,15 +1329,58 @@ export default function Dashboard() {
                 const variancePercent = row.actual > 0 ? (variance / row.actual) * 100 : 0;
                 const isOverBudget = variance > 0;
                 
+                const effectiveAdj = manualForecasts[row.name] !== undefined 
+                  ? (row.originalForecast > 0 ? ((manualForecasts[row.name] - row.originalForecast) / row.originalForecast) * 100 : 0)
+                  : (forecastAdjustments[row.name] || 0);
+                
                 return (
                   <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
                     <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{row.name}</td>
                     <td className="px-6 py-4 text-right font-mono text-slate-500">{formatCurrency(row.actual)}</td>
-                    <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">{formatCurrency(row.forecast)}</td>
+                    <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">
+                      <div className="flex items-center justify-end gap-1">
+                        <input 
+                          type="number" 
+                          value={effectiveAdj.toFixed(0)}
+                          onChange={(e) => {
+                            const val = e.target.value ? Number(e.target.value) : 0;
+                            setForecastAdjustments(prev => ({ ...prev, [row.name]: val }));
+                            setManualForecasts(prev => {
+                              const next = { ...prev };
+                              delete next[row.name];
+                              return next;
+                            });
+                          }}
+                          className="w-16 text-right bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1 focus:ring-orange-500 focus:border-orange-500"
+                        />
+                        <span className="text-slate-500">%</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">
+                      <input 
+                        type="number" 
+                        value={row.forecast.toFixed(0)}
+                        onChange={(e) => {
+                          const val = e.target.value ? Number(e.target.value) : 0;
+                          setManualForecasts(prev => ({ ...prev, [row.name]: val }));
+                          setForecastAdjustments(prev => {
+                            const next = { ...prev };
+                            delete next[row.name];
+                            return next;
+                          });
+                        }}
+                        className="w-32 text-right bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1 focus:ring-orange-500 focus:border-orange-500 ml-auto"
+                      />
+                    </td>
                     <td className="px-6 py-4 text-right font-mono">
                       <div className={`flex items-center justify-end gap-1 ${isOverBudget ? 'text-red-500' : 'text-green-500'}`}>
                         {isOverBudget ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                        {formatCurrency(Math.abs(variance))} ({Math.abs(variancePercent).toFixed(1)}%)
+                        {formatCurrency(Math.abs(variance))}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right font-mono">
+                      <div className={`flex items-center justify-end gap-1 ${isOverBudget ? 'text-red-500' : 'text-green-500'}`}>
+                        {Math.abs(variancePercent).toFixed(0)}%
                       </div>
                     </td>
                     <td className="px-6 py-4 text-center">
@@ -1106,7 +1404,15 @@ export default function Dashboard() {
       <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden mb-6">
         <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h2 className="text-lg font-bold">Department Forecast Details</h2>
+            <h2 className="text-lg font-bold flex items-center">
+              Department Forecast Details
+              <FormulaPopup 
+                title="Department Forecast Details" 
+                formula="Line-item level Actual vs Forecast" 
+                explanation="A granular, transaction-level view of all expenses, allowing you to see exactly where every dollar is allocated and forecasted across departments, heads, and sub-heads." 
+                example={searchedTransactions.length > 0 ? `Tx: ${searchedTransactions[0].department} - ${searchedTransactions[0].head} | Actual: $${formatCurrency(searchedTransactions[0].actual)}` : undefined}
+              />
+            </h2>
             <div className="text-sm text-slate-500 mt-1">
               Showing {searchedTransactions.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} to {Math.min(currentPage * itemsPerPage, searchedTransactions.length)} of {searchedTransactions.length}
             </div>
@@ -1242,14 +1548,45 @@ export default function Dashboard() {
             </div>
             <div className="p-6 max-h-[70vh] overflow-y-auto">
               <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Total Sales Forecast (FY 26-27)</label>
-                  <input
-                    type="number"
-                    value={sales.forecast}
-                    onChange={(e) => setSales({ ...sales, forecast: Number(e.target.value) })}
-                    className="bg-slate-50/50 dark:bg-slate-800/50 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
-                  />
+                <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
+                  <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-200/50 dark:border-slate-700/50">
+                    <div>
+                      <h3 className="text-sm font-medium text-slate-700 dark:text-slate-300">Total Actual Sales (FY 25-26)</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Sum of all monthly actuals below</p>
+                    </div>
+                    <span className="text-xl font-bold text-slate-900 dark:text-white">{formatCurrency(totalActualSales)}</span>
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Forecast Amount (FY 26-27)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">$</span>
+                        <input
+                          type="number"
+                          value={sales.forecast}
+                          onChange={(e) => setSales({ ...sales, forecast: Number(e.target.value) })}
+                          className="pl-7 bg-white dark:bg-slate-900 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Growth Percentage (%)</label>
+                      <div className="relative">
+                        <input
+                          type="number"
+                          value={totalActualSales > 0 ? Number((((sales.forecast - totalActualSales) / totalActualSales) * 100).toFixed(2)) : 0}
+                          onChange={(e) => {
+                            const pct = Number(e.target.value);
+                            const newForecast = totalActualSales * (1 + (pct / 100));
+                            setSales({ ...sales, forecast: newForecast });
+                          }}
+                          className="pr-7 bg-white dark:bg-slate-900 border border-slate-300/50 dark:border-slate-700/50 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 font-medium">%</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 
                 <div>
