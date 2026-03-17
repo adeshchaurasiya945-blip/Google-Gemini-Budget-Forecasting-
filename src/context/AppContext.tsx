@@ -73,13 +73,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // return;
     
     
-    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-      // Fallback to CSV data if Supabase is not configured
-      const parsedData = parseCsvData(rawCsvData);
-      setTransactions(parsedData);
-      setIsLoading(false);
-      return;
-    }
+    // if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+    //   // Fallback to CSV data if Supabase is not configured
+    //   const parsedData = parseCsvData(rawCsvData);
+    //   setTransactions(parsedData);
+    //   setIsLoading(false);
+    //   return;
+    // }
 
     try {
       const { data, error } = await supabase
@@ -90,13 +90,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         console.error('Error fetching transactions:', error);
         // Fallback to CSV data on error
-        const parsedData = parseCsvData(rawCsvData);
-        setTransactions(parsedData);
+        // const parsedData = parseCsvData(rawCsvData);
+        // setTransactions(parsedData);
       } else if (data) {
         if (data.length === 0) {
           // Use CSV data if database is empty
-          const parsedData = parseCsvData(rawCsvData);
-          setTransactions(parsedData);
+          // const parsedData = parseCsvData(rawCsvData);
+          // setTransactions(parsedData);
         } else {
           setTransactions(data);
         }
@@ -104,8 +104,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) {
       console.error('Supabase fetch error:', err);
       // Fallback to CSV data on error
-      const parsedData = parseCsvData(rawCsvData);
-      setTransactions(parsedData);
+      // const parsedData = parseCsvData(rawCsvData);
+      // setTransactions(parsedData);
     } finally {
       setIsLoading(false);
     }
