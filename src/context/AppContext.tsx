@@ -67,12 +67,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
     }
     // Force use of CSV data as requested by user
-    const parsedData = parseCsvData(rawCsvData);
-    setTransactions(parsedData);
-    setIsLoading(false);
-    return;
+    // const parsedData = parseCsvData(rawCsvData);
+    // setTransactions(parsedData);
+    // setIsLoading(false);
+    // return;
     
-    /*
+    
     if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
       // Fallback to CSV data if Supabase is not configured
       const parsedData = parseCsvData(rawCsvData);
@@ -109,7 +109,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setIsLoading(false);
     }
-    */
+    
   };
 
   const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
