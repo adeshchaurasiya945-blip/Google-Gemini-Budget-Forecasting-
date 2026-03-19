@@ -118,6 +118,15 @@ export default function Dashboard() {
   useEffect(() => {
     localStorage.setItem('monthlySales', JSON.stringify(monthlySales));
   }, [monthlySales]);
+
+  const [targetCostPct, setTargetCostPct] = useState<number>(() => {
+    const saved = localStorage.getItem('targetCostPct');
+    return saved ? Number(saved) : 50;
+  });
+
+  useEffect(() => {
+    localStorage.setItem('targetCostPct', targetCostPct.toString());
+  }, [targetCostPct]);
   
   const totalActualSales = useMemo(() => Object.values(monthlySales).reduce((a: number, b: number) => a + b, 0), [monthlySales]);
 
@@ -640,12 +649,12 @@ export default function Dashboard() {
                 <span>Target Planning</span>
               </div>
               <div>
-                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">Required Sales (50% Floor)</h3>
+                <h3 className="font-semibold text-slate-900 dark:text-white mb-1 text-sm">Required Sales ({targetCostPct}% Floor)</h3>
                 <div className="bg-slate-50/80 dark:bg-slate-800/50 p-3 rounded-lg font-mono text-[11px] mb-2 border border-emerald-100 dark:border-emerald-900/20">
-                  Target = Forecast Expenses / 0.50
+                  Target = Forecast Expenses / {(targetCostPct / 100).toFixed(2)}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                  <span className="font-bold text-emerald-600 dark:text-emerald-400">Strategic Impact:</span> Defines the minimum revenue required to maintain a 50% gross margin target based on current cost structure.
+                  <span className="font-bold text-emerald-600 dark:text-emerald-400">Strategic Impact:</span> Defines the minimum revenue required to maintain a {targetCostPct}% gross margin target based on current cost structure.
                 </p>
               </div>
             </div>
@@ -992,9 +1001,18 @@ export default function Dashboard() {
                     <span className="font-semibold text-slate-900 dark:text-white">{sales.forecast > 0 ? ((totals.forecast / sales.forecast) * 100).toFixed(0) : 0}%</span>
                   </div>
                   <div className="pt-3 border-t border-purple-200 dark:border-purple-800/50 flex justify-between items-center">
-                    <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Req. Sales (50% Cost)</span>
+                    <div className="flex items-center gap-1">
+                      <span className="text-xs font-bold text-gray-700 dark:text-slate-300">Req. Sales (</span>
+                      <input 
+                        type="number" 
+                        value={targetCostPct}
+                        onChange={(e) => setTargetCostPct(Number(e.target.value) || 0)}
+                        className="w-10 text-xs text-center bg-white dark:bg-slate-800 border border-purple-200 dark:border-purple-700 rounded p-0.5 focus:ring-purple-500 focus:border-purple-500"
+                      />
+                      <span className="text-xs font-bold text-gray-700 dark:text-slate-300">% Cost)</span>
+                    </div>
                     <span className="text-sm font-bold text-purple-600 dark:text-purple-400">
-                      {formatCurrency(totals.forecast / 0.5)}
+                      {formatCurrency(totals.forecast / (targetCostPct / 100 || 1))}
                     </span>
                   </div>
                 </div>
@@ -1039,9 +1057,9 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3 }}
-              className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+              className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-visible flex flex-col justify-between"
             >
-              <div className="absolute top-0 left-0 w-1 h-full bg-red-500" />
+              <div className="absolute top-0 left-0 w-1 h-full bg-red-500 rounded-l-2xl" />
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center">
@@ -1067,9 +1085,9 @@ export default function Dashboard() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-hidden flex flex-col justify-between"
+              className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 p-4 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm relative overflow-visible flex flex-col justify-between"
             >
-              <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500" />
+              <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500 rounded-l-2xl" />
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="text-xs font-medium text-slate-500 dark:text-slate-400 flex items-center">
@@ -1275,8 +1293,8 @@ export default function Dashboard() {
       </div> {/* End Flex Container */}
 
       {/* Department Analysis Table */}
-      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden mb-6">
-        <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-visible mb-6">
+        <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-t-2xl">
           <div>
             <h2 className="text-lg font-bold flex items-center">
               Variance Analysis {getLevelLabel()}
@@ -1401,8 +1419,8 @@ export default function Dashboard() {
       </div>
 
       {/* Transaction Table */}
-      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-hidden mb-6">
-        <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-white/80 dark:bg-slate-900/50 backdrop-blur-xl hover:bg-white/90 dark:hover:bg-slate-900/70 transition-all duration-300 rounded-2xl border border-slate-200/50 dark:border-slate-700/50 shadow-sm overflow-visible mb-6">
+        <div className="p-6 border-b border-slate-200/50 dark:border-slate-700/50 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 rounded-t-2xl">
           <div>
             <h2 className="text-lg font-bold flex items-center">
               Department Forecast Details
