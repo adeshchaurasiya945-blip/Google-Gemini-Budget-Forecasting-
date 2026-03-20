@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { rawCsvData } from '../data/csvData';
+import { parseCsvData } from '../utils/parseData';
 
 export interface Transaction {
   id: string;
@@ -21,6 +23,13 @@ interface AppContextType {
   updateTransaction: (id: string, tx: Omit<Transaction, 'id'>) => void;
   deleteTransaction: (id: string) => void;
   renameCategory: (type: 'department' | 'head' | 'subHead', oldName: string, newName: string) => void;
+  sales: { forecast: number };
+  setSales: (sales: { forecast: number }) => void;
+  monthlySales: Record<string, number>;
+  setMonthlySales: (monthlySales: Record<string, number>) => void;
+  saveSalesSettings: () => Promise<void>;
+  isSettingsOpen: boolean;
+  setIsSettingsOpen: (isOpen: boolean) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -28,7 +37,20 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [companyName, setCompanyName] = useState(() => localStorage.getItem('companyName') || 'Global Spices Co.');
   const [logo, setLogo] = useState<string | null>(() => localStorage.getItem('companyLogo'));
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [sales, setSales] = useState(() => {
+    const saved = localStorage.getItem('sales');
+    return saved ? JSON.parse(saved) : { forecast: 115000000 };
+  });
+  const [monthlySales, setMonthlySales] = useState<Record<string, number>>(() => {
+    const saved = localStorage.getItem('monthlySales');
+    return saved ? JSON.parse(saved) : {
+      'Apr': 8000000, 'May': 8200000, 'Jun': 8400000, 'Jul': 8600000, 
+      'Aug': 8800000, 'Sep': 9000000, 'Oct': 9200000, 'Nov': 9400000, 
+      'Dec': 9600000, 'Jan': 8000000, 'Feb': 8500000, 'Mar': 9000000
+    };
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -44,7 +66,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [logo]);
 
   useEffect(() => {
+    localStorage.setItem('sales', JSON.stringify(sales));
+  }, [sales]);
+
+  useEffect(() => {
+    localStorage.setItem('monthlySales', JSON.stringify(monthlySales));
+  }, [monthlySales]);
+
+  useEffect(() => {
     fetchTransactions();
+    fetchSalesSettings();
   }, []);
 
   useEffect(() => {
@@ -52,6 +83,64 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('transactions', JSON.stringify(transactions));
     }
   }, [transactions, isLoading]);
+
+  const fetchSalesSettings = async () => {
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('sales')
+        .select('*')
+        .limit(1)
+        .single();
+
+      if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+        console.error('Error fetching sales settings:', error);
+      } else if (data) {
+        if (data.forecast !== undefined) {
+          setSales({ forecast: data.forecast });
+        }
+        if (data.monthly_sales) {
+          setMonthlySales(data.monthly_sales);
+        }
+      }
+    } catch (err) {
+      console.error('Supabase fetch sales error:', err);
+    }
+  };
+
+  const saveSalesSettings = async () => {
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      return;
+    }
+
+    try {
+      // Check if a row exists
+      const { data: existingData } = await supabase.from('sales').select('id').limit(1);
+      
+      if (existingData && existingData.length > 0) {
+        // Update existing
+        const { error } = await supabase
+          .from('sales')
+          .update({ forecast: sales.forecast, monthly_sales: monthlySales })
+          .eq('id', existingData[0].id);
+          
+        if (error) throw error;
+      } else {
+        // Insert new
+        const { error } = await supabase
+          .from('sales')
+          .insert([{ forecast: sales.forecast, monthly_sales: monthlySales }]);
+          
+        if (error) throw error;
+      }
+    } catch (err: any) {
+      console.error('Error saving sales settings:', err);
+      alert(`Failed to save sales settings to database: ${err.message}`);
+    }
+  };
 
   const fetchTransactions = async () => {
     const stored = localStorage.getItem('transactions');
@@ -64,20 +153,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         console.error('Failed to parse stored transactions', e);
       }
     }
-    // Force use of CSV data as requested by user
-    // const parsedData = parseCsvData(rawCsvData);
-    // setTransactions(parsedData);
-    // setIsLoading(false);
-    // return;
     
-    
-    // if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-    //   // Fallback to CSV data if Supabase is not configured
-    //   const parsedData = parseCsvData(rawCsvData);
-    //   setTransactions(parsedData);
-    //   setIsLoading(false);
-    //   return;
-    // }
+    if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+      // Fallback to CSV data if Supabase is not configured
+      const parsedData = parseCsvData(rawCsvData);
+      setTransactions(parsedData);
+      setIsLoading(false);
+      return;
+    }
 
     try {
       const { data, error } = await supabase
@@ -88,13 +171,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (error) {
         console.error('Error fetching transactions:', error);
         // Fallback to CSV data on error
-        // const parsedData = parseCsvData(rawCsvData);
-        // setTransactions(parsedData);
+        const parsedData = parseCsvData(rawCsvData);
+        setTransactions(parsedData);
       } else if (data) {
         if (data.length === 0) {
           // Use CSV data if database is empty
-          // const parsedData = parseCsvData(rawCsvData);
-          // setTransactions(parsedData);
+          const parsedData = parseCsvData(rawCsvData);
+          setTransactions(parsedData);
         } else {
           setTransactions(data);
         }
@@ -102,12 +185,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) {
       console.error('Supabase fetch error:', err);
       // Fallback to CSV data on error
-      // const parsedData = parseCsvData(rawCsvData);
-      // setTransactions(parsedData);
+      const parsedData = parseCsvData(rawCsvData);
+      setTransactions(parsedData);
     } finally {
       setIsLoading(false);
     }
-    
   };
 
   const addTransaction = async (tx: Omit<Transaction, 'id'>) => {
@@ -180,7 +262,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppContext.Provider value={{
       companyName, setCompanyName, logo, setLogo,
-      transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory
+      transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory,
+      sales, setSales, monthlySales, setMonthlySales, saveSalesSettings,
+      isSettingsOpen, setIsSettingsOpen
     }}>
       {children}
     </AppContext.Provider>

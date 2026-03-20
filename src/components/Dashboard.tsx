@@ -8,7 +8,7 @@ import {
 } from 'recharts';
 import * as htmlToImage from 'html-to-image';
 import { jsPDF } from 'jspdf';
-import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare, Camera, PieChart as PieChartIcon, Info, HelpCircle } from 'lucide-react';
+import { Brain, TrendingUp, TrendingDown, AlertCircle, Plus, Edit, Trash2, ChevronLeft, ChevronRight, ChevronDown, Search, Download, Filter, DollarSign, Target, Activity, ActivitySquare, Camera, PieChart as PieChartIcon, Info, HelpCircle, Upload, X } from 'lucide-react';
 
 const DEPARTMENTS = [
   "All",
@@ -64,7 +64,7 @@ const FormulaPopup = ({ title, formula, explanation, example }: { title: string,
 };
 
 export default function Dashboard() {
-  const { transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory } = useAppContext();
+  const { transactions, addTransaction, updateTransaction, deleteTransaction, renameCategory, sales, setSales, monthlySales, setMonthlySales, saveSalesSettings, companyName, setCompanyName, logo, setLogo, isSettingsOpen, setIsSettingsOpen } = useAppContext();
   const [selectedDept, setSelectedDept] = useState("All");
   const [selectedHead, setSelectedHead] = useState("All");
   const [selectedSubHead, setSelectedSubHead] = useState("All");
@@ -80,44 +80,13 @@ export default function Dashboard() {
     const saved = localStorage.getItem('forecastAdjustments');
     return saved ? JSON.parse(saved) : {};
   });
-  const [manualForecasts, setManualForecasts] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem('manualForecasts');
-    return saved ? JSON.parse(saved) : {};
-  });
   const [varianceSearchQuery, setVarianceSearchQuery] = useState("");
   const [budgetComparisonMetric, setBudgetComparisonMetric] = useState('actual');
   const [budgetComparisonView, setBudgetComparisonView] = useState('department'); // 'department' or 'month'
-  
-  const [sales, setSales] = useState(() => {
-    const saved = localStorage.getItem('sales');
-    return saved ? JSON.parse(saved) : { forecast: 115000000 };
-  });
-  
-  const [monthlySales, setMonthlySales] = useState<Record<string, number>>(() => {
-    const saved = localStorage.getItem('monthlySales');
-    return saved ? JSON.parse(saved) : {
-      'Apr': 8000000, 'May': 8200000, 'Jun': 8400000, 'Jul': 8600000, 
-      'Aug': 8800000, 'Sep': 9000000, 'Oct': 9200000, 'Nov': 9400000, 
-      'Dec': 9600000, 'Jan': 8000000, 'Feb': 8500000, 'Mar': 9000000
-    };
-  });
-  const [isSalesFormOpen, setIsSalesFormOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('forecastAdjustments', JSON.stringify(forecastAdjustments));
   }, [forecastAdjustments]);
-
-  useEffect(() => {
-    localStorage.setItem('manualForecasts', JSON.stringify(manualForecasts));
-  }, [manualForecasts]);
-
-  useEffect(() => {
-    localStorage.setItem('sales', JSON.stringify(sales));
-  }, [sales]);
-
-  useEffect(() => {
-    localStorage.setItem('monthlySales', JSON.stringify(monthlySales));
-  }, [monthlySales]);
 
   const [targetCostPct, setTargetCostPct] = useState<number>(() => {
     const saved = localStorage.getItem('targetCostPct');
@@ -127,7 +96,7 @@ export default function Dashboard() {
   useEffect(() => {
     localStorage.setItem('targetCostPct', targetCostPct.toString());
   }, [targetCostPct]);
-  
+
   const totalActualSales = useMemo(() => Object.values(monthlySales).reduce((a: number, b: number) => a + b, 0), [monthlySales]);
 
   // Dynamic Departments based on transactions
@@ -226,9 +195,29 @@ export default function Dashboard() {
     }
   };
 
+  // Apply adjustments to create adjustedTransactions
+  const adjustedTransactions = useMemo(() => {
+    return transactions.map(t => {
+      let adj = 0;
+      if (forecastAdjustments[t.subHead] !== undefined) {
+        adj = forecastAdjustments[t.subHead];
+      } else if (forecastAdjustments[t.head] !== undefined) {
+        adj = forecastAdjustments[t.head];
+      } else if (forecastAdjustments[t.department] !== undefined) {
+        adj = forecastAdjustments[t.department];
+      }
+      
+      return {
+        ...t,
+        originalForecast: t.forecast,
+        forecast: t.forecast * (1 + adj / 100)
+      };
+    });
+  }, [transactions, forecastAdjustments]);
+
   // Filtering
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(t => {
+    return adjustedTransactions.filter(t => {
       const matchDept = selectedDept === "All" || t.department === selectedDept;
       const matchHead = selectedHead === "All" || t.head === selectedHead;
       const matchSubHead = selectedSubHead === "All" || t.subHead === selectedSubHead;
@@ -237,7 +226,7 @@ export default function Dashboard() {
 
       return matchDept && matchHead && matchSubHead && matchStart && matchEnd;
     });
-  }, [transactions, selectedDept, selectedHead, selectedSubHead, dateRange]);
+  }, [adjustedTransactions, selectedDept, selectedHead, selectedSubHead, dateRange]);
 
   const searchedTransactions = useMemo(() => {
     const searchLower = searchQuery.toLowerCase();
@@ -273,25 +262,127 @@ export default function Dashboard() {
       const key = curr[groupBy];
       if (!acc[key]) acc[key] = { actual: 0, forecast: 0, originalForecast: 0 };
       acc[key].actual += curr.actual;
-      acc[key].originalForecast += curr.forecast;
-      
-      const adj = forecastAdjustments[key] || 0;
-      acc[key].forecast += curr.forecast * (1 + adj / 100);
+      acc[key].forecast += curr.forecast;
+      acc[key].originalForecast += curr.originalForecast || curr.forecast;
       return acc;
     }, {} as Record<string, { actual: number, forecast: number, originalForecast: number }>);
     
     return Object.entries(grouped)
       .map(([name, values]: [string, any]) => {
-        const finalForecast = manualForecasts[name] !== undefined ? manualForecasts[name] : values.forecast;
         return { 
           name, 
           actual: values.actual, 
-          forecast: finalForecast,
+          forecast: values.forecast,
           originalForecast: values.originalForecast
         };
       })
       .sort((a, b) => b.actual - a.actual);
-  }, [filteredTransactions, selectedDept, selectedHead, forecastAdjustments, manualForecasts]);
+  }, [filteredTransactions, selectedDept, selectedHead]);
+
+  // Variance Tree Data
+  const varianceTree = useMemo(() => {
+    interface VarianceNode {
+      id: string;
+      name: string;
+      level: 'department' | 'head' | 'subHead';
+      actual: number;
+      originalForecast: number;
+      forecast: number;
+      children?: VarianceNode[];
+    }
+    
+    const tree: VarianceNode[] = [];
+    const deptMap = new Map<string, VarianceNode>();
+    const headMap = new Map<string, VarianceNode>();
+    
+    // Filter transactions based on date and search query, but NOT department/head filters
+    // so the tree always shows the full hierarchy unless searched
+    const searchLower = varianceSearchQuery.toLowerCase();
+    const treeTransactions = adjustedTransactions.filter(t => {
+      const matchStart = !dateRange.start || t.date >= dateRange.start;
+      const matchEnd = !dateRange.end || t.date <= dateRange.end;
+      const matchSearch = !varianceSearchQuery || 
+             t.department.toLowerCase().includes(searchLower) ||
+             t.head.toLowerCase().includes(searchLower) ||
+             t.subHead.toLowerCase().includes(searchLower);
+      return matchStart && matchEnd && matchSearch;
+    });
+    
+    treeTransactions.forEach(t => {
+      // Department level
+      let deptNode = deptMap.get(t.department);
+      if (!deptNode) {
+        deptNode = {
+          id: `dept-${t.department}`,
+          name: t.department,
+          level: 'department',
+          actual: 0,
+          originalForecast: 0,
+          forecast: 0,
+          children: []
+        };
+        deptMap.set(t.department, deptNode);
+        tree.push(deptNode);
+      }
+      deptNode.actual += t.actual;
+      deptNode.originalForecast += t.originalForecast || t.forecast;
+      deptNode.forecast += t.forecast;
+      
+      // Head level
+      const headId = `head-${t.department}-${t.head}`;
+      let headNode = headMap.get(headId);
+      if (!headNode) {
+        headNode = {
+          id: headId,
+          name: t.head,
+          level: 'head',
+          actual: 0,
+          originalForecast: 0,
+          forecast: 0,
+          children: []
+        };
+        headMap.set(headId, headNode);
+        deptNode.children!.push(headNode);
+      }
+      headNode.actual += t.actual;
+      headNode.originalForecast += t.originalForecast || t.forecast;
+      headNode.forecast += t.forecast;
+      
+      // SubHead level
+      let subHeadNode = headNode.children!.find(c => c.name === t.subHead);
+      if (!subHeadNode) {
+        subHeadNode = {
+          id: `sub-${t.department}-${t.head}-${t.subHead}`,
+          name: t.subHead,
+          level: 'subHead',
+          actual: 0,
+          originalForecast: 0,
+          forecast: 0
+        };
+        headNode.children!.push(subHeadNode);
+      }
+      subHeadNode.actual += t.actual;
+      subHeadNode.originalForecast += t.originalForecast || t.forecast;
+      subHeadNode.forecast += t.forecast;
+    });
+    
+    // Sort tree by actual descending
+    tree.sort((a, b) => b.actual - a.actual);
+    tree.forEach(d => {
+      d.children?.sort((a, b) => b.actual - a.actual);
+      d.children?.forEach(h => {
+        h.children?.sort((a, b) => b.actual - a.actual);
+      });
+    });
+    
+    return tree;
+  }, [adjustedTransactions, dateRange, varianceSearchQuery]);
+
+  const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({});
+  
+  const toggleNode = (id: string) => {
+    setExpandedNodes(prev => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Aggregations
   const totals = useMemo(() => {
@@ -427,25 +518,123 @@ export default function Dashboard() {
     return chartData.filter(item => item.name.toLowerCase().includes(lower));
   }, [chartData, varianceSearchQuery]);
 
+  const renderVarianceRow = (node: any, depth: number) => {
+    const variance = node.forecast - node.actual;
+    const variancePercent = node.actual > 0 ? (variance / node.actual) * 100 : 0;
+    const isOverBudget = variance > 0;
+    const isExpanded = expandedNodes[node.id];
+    const hasChildren = node.children && node.children.length > 0;
+    
+    return (
+      <React.Fragment key={node.id}>
+        <tr className={`hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors ${depth === 0 ? 'bg-white dark:bg-slate-900' : depth === 1 ? 'bg-slate-50/30 dark:bg-slate-800/30' : 'bg-slate-100/30 dark:bg-slate-700/30'}`}>
+          <td 
+            className={`px-6 py-4 font-medium text-slate-900 dark:text-white ${hasChildren ? 'cursor-pointer select-none' : ''}`}
+            onClick={() => hasChildren && toggleNode(node.id)}
+          >
+            <div className="flex items-center" style={{ paddingLeft: `${depth * 1.5}rem` }}>
+              {hasChildren ? (
+                <div className="mr-2 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700">
+                  {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                </div>
+              ) : (
+                <span className="w-6 mr-2 inline-block"></span>
+              )}
+              {node.name}
+            </div>
+          </td>
+          <td className="px-6 py-4 text-right font-mono text-slate-500">{formatCurrency(node.actual)}</td>
+          <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">
+            <div className="flex items-center justify-end gap-1">
+              <input 
+                type="number" 
+                value={forecastAdjustments[node.name] !== undefined ? forecastAdjustments[node.name] : ''}
+                placeholder="0"
+                onChange={(e) => {
+                  const val = e.target.value ? Number(e.target.value) : undefined;
+                  setForecastAdjustments(prev => {
+                    const next = { ...prev };
+                    if (val === undefined) {
+                      delete next[node.name];
+                    } else {
+                      next[node.name] = val;
+                    }
+                    return next;
+                  });
+                }}
+                className="w-16 text-right bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1 focus:ring-orange-500 focus:border-orange-500"
+              />
+              <span className="text-slate-500">%</span>
+            </div>
+          </td>
+          <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">
+            <input 
+              type="number" 
+              value={node.forecast.toFixed(0)}
+              onChange={(e) => {
+                const val = e.target.value ? Number(e.target.value) : 0;
+                const newAdj = node.originalForecast > 0 ? ((val - node.originalForecast) / node.originalForecast) * 100 : 0;
+                setForecastAdjustments(prev => ({ ...prev, [node.name]: newAdj }));
+              }}
+              className="w-32 text-right bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1 focus:ring-orange-500 focus:border-orange-500 ml-auto"
+            />
+          </td>
+          <td className="px-6 py-4 text-right font-mono">
+            <div className={`flex items-center justify-end gap-1 ${isOverBudget ? 'text-red-500' : 'text-green-500'}`}>
+              {isOverBudget ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+              {formatCurrency(Math.abs(variance))}
+            </div>
+          </td>
+          <td className="px-6 py-4 text-right font-mono">
+            <div className={`flex items-center justify-end gap-1 ${isOverBudget ? 'text-red-500' : 'text-green-500'}`}>
+              {Math.abs(variancePercent).toFixed(0)}%
+            </div>
+          </td>
+          <td className="px-6 py-4 text-center">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
+              isOverBudget 
+                ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' 
+                : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+            }`}>
+              {isOverBudget ? 'Optimization Required' : 'Optimal Efficiency'}
+            </span>
+          </td>
+        </tr>
+        {isExpanded && node.children && node.children.map((child: any) => renderVarianceRow(child, depth + 1))}
+      </React.Fragment>
+    );
+  };
+
   const exportVarianceToCSV = () => {
-    const headers = [getColumnLabel(), "Actual (25-26)", "Adj %", "Forecast (26-27)", "Variances", "Variances %", "Status"];
-    const csvData = filteredChartData.map(row => {
-      const variance = row.forecast - row.actual;
-      const variancePercent = row.actual > 0 ? (variance / row.actual) * 100 : 0;
-      const status = variance > 0 ? 'Optimization Required' : 'Optimal Efficiency';
-      const effectiveAdj = manualForecasts[row.name] !== undefined 
-        ? (row.originalForecast > 0 ? ((manualForecasts[row.name] - row.originalForecast) / row.originalForecast) * 100 : 0)
-        : (forecastAdjustments[row.name] || 0);
-      return [
-        row.name,
-        row.actual,
-        effectiveAdj.toFixed(0) + '%',
-        row.forecast,
-        variance,
-        variancePercent.toFixed(0) + '%',
-        status
-      ];
-    });
+    const headers = ["Level", "Name", "Actual (25-26)", "Adj %", "Forecast (26-27)", "Variances", "Variances %", "Status"];
+    
+    const flattenTree = (nodes: any[], depth: number = 0): any[] => {
+      let result: any[] = [];
+      nodes.forEach(node => {
+        const variance = node.forecast - node.actual;
+        const variancePercent = node.actual > 0 ? (variance / node.actual) * 100 : 0;
+        const status = variance > 0 ? 'Optimization Required' : 'Optimal Efficiency';
+        const adj = forecastAdjustments[node.name] || 0;
+        
+        result.push([
+          node.level,
+          node.name,
+          node.actual.toFixed(2),
+          adj.toFixed(2) + '%',
+          node.forecast.toFixed(2),
+          variance.toFixed(2),
+          variancePercent.toFixed(2) + '%',
+          status
+        ]);
+        
+        if (node.children && node.children.length > 0) {
+          result = result.concat(flattenTree(node.children, depth + 1));
+        }
+      });
+      return result;
+    };
+    
+    const csvData = flattenTree(varianceTree);
     
     const csvContent = [
       headers.join(","),
@@ -892,7 +1081,7 @@ export default function Dashboard() {
 
             <div className="mt-6 pt-6 border-t border-slate-800 flex flex-col gap-3">
               <button 
-                onClick={() => setIsSalesFormOpen(true)}
+                onClick={() => setIsSettingsOpen(true)}
                 className="flex items-center justify-center gap-2 bg-slate-800 hover:bg-slate-700 text-white px-4 py-3 rounded-xl font-bold text-xs transition-all w-full border border-slate-700 shadow-lg hover:shadow-orange-500/10"
               >
                 <Target className="w-4 h-4 text-orange-500" /> Strategic Settings
@@ -1317,7 +1506,7 @@ export default function Dashboard() {
                 value={varianceSearchQuery}
                 onChange={(e) => setVarianceSearchQuery(e.target.value)}
                 className="bg-slate-50/50 dark:bg-slate-800/50 border border-gray-200 dark:border-gray-700 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full pl-10 p-2.5 outline-none transition-all" 
-                placeholder={`Search ${getColumnLabel().toLowerCase()}...`} 
+                placeholder="Search category..." 
               />
             </div>
             <button 
@@ -1332,7 +1521,7 @@ export default function Dashboard() {
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-slate-500 dark:text-slate-400 uppercase bg-slate-50/50 dark:bg-slate-800/50/50">
               <tr>
-                <th className="px-6 py-4 font-medium">{getColumnLabel()}</th>
+                <th className="px-6 py-4 font-medium">Category</th>
                 <th className="px-6 py-4 font-medium text-right">Actual (25-26)</th>
                 <th className="px-6 py-4 font-medium text-right">Adj %</th>
                 <th className="px-6 py-4 font-medium text-right">Forecast (26-27)</th>
@@ -1342,77 +1531,15 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 dark:divide-gray-800">
-              {filteredChartData.map((row, i) => {
-                const variance = row.forecast - row.actual;
-                const variancePercent = row.actual > 0 ? (variance / row.actual) * 100 : 0;
-                const isOverBudget = variance > 0;
-                
-                const effectiveAdj = manualForecasts[row.name] !== undefined 
-                  ? (row.originalForecast > 0 ? ((manualForecasts[row.name] - row.originalForecast) / row.originalForecast) * 100 : 0)
-                  : (forecastAdjustments[row.name] || 0);
-                
-                return (
-                  <tr key={i} className="hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors">
-                    <td className="px-6 py-4 font-medium text-slate-900 dark:text-white">{row.name}</td>
-                    <td className="px-6 py-4 text-right font-mono text-slate-500">{formatCurrency(row.actual)}</td>
-                    <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">
-                      <div className="flex items-center justify-end gap-1">
-                        <input 
-                          type="number" 
-                          value={effectiveAdj.toFixed(0)}
-                          onChange={(e) => {
-                            const val = e.target.value ? Number(e.target.value) : 0;
-                            setForecastAdjustments(prev => ({ ...prev, [row.name]: val }));
-                            setManualForecasts(prev => {
-                              const next = { ...prev };
-                              delete next[row.name];
-                              return next;
-                            });
-                          }}
-                          className="w-16 text-right bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1 focus:ring-orange-500 focus:border-orange-500"
-                        />
-                        <span className="text-slate-500">%</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono font-medium text-slate-900 dark:text-white">
-                      <input 
-                        type="number" 
-                        value={row.forecast.toFixed(0)}
-                        onChange={(e) => {
-                          const val = e.target.value ? Number(e.target.value) : 0;
-                          setManualForecasts(prev => ({ ...prev, [row.name]: val }));
-                          setForecastAdjustments(prev => {
-                            const next = { ...prev };
-                            delete next[row.name];
-                            return next;
-                          });
-                        }}
-                        className="w-32 text-right bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded p-1 focus:ring-orange-500 focus:border-orange-500 ml-auto"
-                      />
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono">
-                      <div className={`flex items-center justify-end gap-1 ${isOverBudget ? 'text-red-500' : 'text-green-500'}`}>
-                        {isOverBudget ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-                        {formatCurrency(Math.abs(variance))}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-right font-mono">
-                      <div className={`flex items-center justify-end gap-1 ${isOverBudget ? 'text-red-500' : 'text-green-500'}`}>
-                        {Math.abs(variancePercent).toFixed(0)}%
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${
-                        isOverBudget 
-                          ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400' 
-                          : 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
-                      }`}>
-                        {isOverBudget ? 'Optimization Required' : 'Optimal Efficiency'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {varianceTree.length > 0 ? (
+                varianceTree.map(node => renderVarianceRow(node, 0))
+              ) : (
+                <tr>
+                  <td colSpan={7} className="px-6 py-8 text-center text-slate-500 dark:text-slate-400">
+                    No data found for the selected filters.
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1500,6 +1627,14 @@ export default function Dashboard() {
                   </td>
                 </tr>
               )}
+              {paginatedTransactions.length > 0 && (
+                <tr className="bg-slate-50/80 dark:bg-slate-800/80 font-bold border-t-2 border-slate-200 dark:border-slate-700">
+                  <td colSpan={4} className="px-6 py-4 text-right">Total for Filtered Results:</td>
+                  <td className="px-6 py-4 text-right font-mono">{formatCurrency(searchedTransactions.reduce((sum, tx) => sum + tx.actual, 0))}</td>
+                  <td className="px-6 py-4 text-right font-mono text-orange-600 dark:text-orange-400">{formatCurrency(searchedTransactions.reduce((sum, tx) => sum + tx.forecast, 0))}</td>
+                  <td></td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -1548,7 +1683,7 @@ export default function Dashboard() {
       </div>
 
       {/* Sales Settings Modal */}
-      {isSalesFormOpen && (
+      {isSettingsOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
           <motion.div 
             initial={{ opacity: 0, scale: 0.95 }}
@@ -1560,12 +1695,13 @@ export default function Dashboard() {
                 <Target className="w-5 h-5 text-orange-500" />
                 Sales Settings
               </h2>
-              <button onClick={() => setIsSalesFormOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
+              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
             <div className="p-6 max-h-[70vh] overflow-y-auto">
               <div className="space-y-6">
+                {/* Sales Settings */}
                 <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-xl border border-slate-200/50 dark:border-slate-700/50">
                   <div className="flex justify-between items-center mb-4 pb-4 border-b border-slate-200/50 dark:border-slate-700/50">
                     <div>
@@ -1627,10 +1763,19 @@ export default function Dashboard() {
             </div>
             <div className="p-6 border-t border-slate-200/50 dark:border-slate-700/50 flex justify-end gap-3 bg-slate-50/50 dark:bg-slate-800/50">
               <button 
-                onClick={() => setIsSalesFormOpen(false)}
+                onClick={() => setIsSettingsOpen(false)}
                 className="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-300/50 dark:border-slate-700/50 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
                 Close
+              </button>
+              <button 
+                onClick={async () => {
+                  await saveSalesSettings();
+                  setIsSettingsOpen(false);
+                }}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-600 border border-transparent rounded-lg hover:bg-orange-700 transition-colors"
+              >
+                Save
               </button>
             </div>
           </motion.div>

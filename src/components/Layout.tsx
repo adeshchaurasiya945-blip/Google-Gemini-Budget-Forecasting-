@@ -6,33 +6,9 @@ import { motion } from 'motion/react';
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { theme, toggleTheme } = useTheme();
-  const { companyName, setCompanyName, logo, setLogo } = useAppContext();
+  const { companyName, setCompanyName, logo, setLogo, setIsSettingsOpen } = useAppContext();
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [tempName, setTempName] = useState(companyName);
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-  useEffect(() => {
-    setTempName(companyName);
-  }, [companyName]);
-
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setLogo(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleNameSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (tempName.trim()) {
-      setCompanyName(tempName.trim());
-      setIsSettingsOpen(false);
-    }
-  };
+  const [isCompanySettingsOpen, setIsCompanySettingsOpen] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -50,58 +26,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setLogo(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50/50 via-emerald-50/30 to-teal-50/50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100 transition-colors duration-200">
-      {isSettingsOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900 dark:text-white">Company Settings</h2>
-              <button onClick={() => setIsSettingsOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Company Logo</label>
-                <div className="flex items-center gap-4">
-                  <div className="w-16 h-16 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50">
-                    {logo ? (
-                      <img src={logo} alt="Company Logo" className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-orange-600 dark:text-orange-400 font-bold text-2xl">
-                        {companyName.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <label className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer transition-colors text-sm font-medium border border-slate-200 dark:border-slate-700">
-                    <Upload className="w-4 h-4" />
-                    Upload New Logo
-                    <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
-                  </label>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Company Name</label>
-                <form onSubmit={handleNameSubmit} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={tempName}
-                    onChange={(e) => setTempName(e.target.value)}
-                    className="flex-1 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none"
-                  />
-                  <button type="submit" className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-sm font-medium transition-colors">
-                    Save
-                  </button>
-                </form>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <header className="sticky top-0 z-50 w-full border-b border-slate-200/50 dark:border-slate-800/50 bg-white/70 dark:bg-slate-900/90 backdrop-blur-xl">
         {/* Animated Spices Background */}
         <div className="absolute inset-0 pointer-events-none opacity-20 dark:opacity-30 flex items-center justify-around overflow-hidden">
@@ -129,9 +66,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="w-full px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between relative z-10">
-          <div className="flex items-center gap-4 group">
-            <div className="relative">
-              <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50">
+          <div className="flex items-center gap-4">
+            <div className="relative group cursor-pointer" onClick={() => setIsCompanySettingsOpen(true)} title="Edit Company Settings">
+              <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50 group-hover:ring-2 ring-orange-400 transition-all">
                 {logo ? (
                   <img src={logo} alt="Company Logo" className="w-full h-full object-cover" />
                 ) : (
@@ -140,13 +77,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </span>
                 )}
               </div>
+              <div className="absolute -bottom-2 -right-2 p-1 bg-white dark:bg-slate-800 rounded-full shadow-md border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover:opacity-100">
+                <Edit2 className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+              </div>
             </div>
             
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <h1 className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent">
+                <h1 
+                  className="text-xl font-bold bg-gradient-to-r from-orange-600 to-red-600 bg-clip-text text-transparent cursor-pointer hover:opacity-80 transition-opacity"
+                  onClick={() => setIsCompanySettingsOpen(true)}
+                  title="Edit Company Settings"
+                >
                   {companyName}
                 </h1>
+                <button 
+                  onClick={() => setIsCompanySettingsOpen(true)}
+                  className="p-1.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 hover:bg-orange-100 dark:hover:bg-orange-900/30 hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
+                  title="Edit Company Settings"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                </button>
               </div>
             </div>
           </div>
@@ -158,7 +109,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-800/50 transition-all duration-300"
-              title="Company Settings"
+              title="Sales Settings"
             >
               <Settings className="w-5 h-5" />
             </button>
@@ -182,6 +133,77 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <main className="w-full px-4 sm:px-6 lg:px-8 py-8">
         {children}
       </main>
+
+      {/* Company Settings Modal */}
+      {isCompanySettingsOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200 dark:border-slate-800"
+          >
+            <div className="p-6 border-b border-slate-200 dark:border-slate-800 flex justify-between items-center">
+              <h2 className="text-xl font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                <Settings className="w-5 h-5 text-orange-500" />
+                Company Profile
+              </h2>
+              <button onClick={() => setIsCompanySettingsOpen(false)} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Company Logo</label>
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-xl bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center overflow-hidden border border-orange-200 dark:border-orange-800/50">
+                    {logo ? (
+                      <img src={logo} alt="Company Logo" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-orange-600 dark:text-orange-400 font-bold text-2xl">
+                        {companyName.charAt(0).toUpperCase()}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="flex items-center gap-2 px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg cursor-pointer transition-colors text-sm font-medium">
+                      <Upload className="w-4 h-4" />
+                      Upload New Logo
+                      <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
+                    </label>
+                    {logo && (
+                      <button 
+                        onClick={() => setLogo(null)}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/40 text-red-600 dark:text-red-400 rounded-lg cursor-pointer transition-colors text-sm font-medium"
+                      >
+                        <X className="w-4 h-4" />
+                        Remove Logo
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Company Name</label>
+                <input
+                  type="text"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  className="bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-sm rounded-lg focus:ring-orange-500 focus:border-orange-500 block w-full p-2.5"
+                />
+              </div>
+            </div>
+            <div className="p-6 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+              <button 
+                onClick={() => setIsCompanySettingsOpen(false)}
+                className="px-4 py-2 text-sm font-medium text-white bg-orange-600 rounded-lg hover:bg-orange-700 transition-colors"
+              >
+                Done
+              </button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
